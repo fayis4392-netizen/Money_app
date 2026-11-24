@@ -1,5 +1,6 @@
 import type { Statement } from '@/domain/ledger'
 import { dmy } from '@/domain/format'
+import { isMissingChunk, reloadForUpdate } from './updates'
 
 /* Ledger exports in the operator's book format: DATE · PARTICULARS · QTY · RATE · CREDIT · DEBIT · BALANCE */
 
@@ -43,7 +44,15 @@ export function exportLedgerCsv(title: string, s: Statement, name: string, style
 }
 
 const purple: [number, number, number] = [128, 0, 128]
-const loadPdf = () => Promise.all([import('jspdf'), import('jspdf-autotable')])
+const loadPdf = () =>
+  Promise.all([import('jspdf'), import('jspdf-autotable')]).catch((e) => {
+    // an old tab after a deploy: its PDF code is gone, so move to the new version
+    if (isMissingChunk(e)) {
+      reloadForUpdate()
+      throw new Error('the app was just updated. Reloading, then try again.')
+    }
+    throw e
+  })
 type Pdf = InstanceType<Awaited<ReturnType<typeof loadPdf>>[0]['jsPDF']>
 const GRID = { theme: 'grid' as const, margin: { left: 10, right: 10, bottom: 18 }, showFoot: 'lastPage' as const,
   styles: { font: 'times', fontSize: 8.5, textColor: 20, lineColor: purple, lineWidth: 0.25, cellPadding: 1.6, valign: 'middle' as const },
