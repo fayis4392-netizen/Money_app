@@ -150,7 +150,7 @@ export default function PartyLedger() {
               <h3 className="font-bold">{cur} ledger</h3>
               <div className="text-sm">Balance <b className={cn('tabular-nums', s.totals.balance > 0.0005 ? 'text-pos' : s.totals.balance < -0.0005 ? 'text-neg' : '')}>{cur} {drcr(s.totals.balance)}</b></div>
             </div>
-            {s.rows.length ? <LedgerTable rows={s.rows as Row[]} totals={s.totals} actions={rowActions} receipts={data.receipts} voided={voided} style={styleFor(cur)} /> : <Empty>No entries in this period</Empty>}
+            {s.rows.length ? <LedgerTable rows={s.rows as Row[]} totals={s.totals} actions={rowActions} receipts={data.receipts} voided={voided} style={styleFor(cur)} customer={p.type === 'saudi_customer'} /> : <Empty>No entries in this period</Empty>}
             <div className="flex justify-end gap-2 border-t border-border px-4 py-3 md:px-5">
               <Button size="sm" onClick={() => exportLedgerCsv(title, s, name, styleFor(cur))}><FileSpreadsheet /> Excel (CSV)</Button>
               <Button size="sm" onClick={() => exportLedgerPdf(title, s, name, styleFor(cur)).catch((e) => toast.error('PDF failed: ' + (e as Error).message))}><FileDown /> PDF</Button>
@@ -192,8 +192,44 @@ export default function PartyLedger() {
   )
 }
 
-function LedgerTable({ rows, totals, actions, receipts, voided, style }: { rows: Row[]; totals: { qty: number; debit: number; credit: number; balance: number }; actions: (r: Row) => React.ReactNode; receipts: Receipt[]; voided: Set<string>; style: LedgerStyle }) {
+/** What + and − mean on this kind of ledger: a customer is billed and pays; everyone else holds money that comes in and goes out. */
+const FLOW: Record<'customer' | 'holder', { in: string; out: string; inHint: string; outHint: string }> = {
+  customer: { in: 'Billed', out: 'Paid', inHint: 'deals billed to the customer (balance due goes up)', outHint: 'cash the customer paid (balance due goes down)' },
+  holder: { in: 'In', out: 'Out', inHint: 'money that came to them', outHint: 'money that went out from them' },
+}
+type Flow = 'all' | 'in' | 'out'
+
+function LedgerTable({ rows: allRows, totals, actions, receipts, voided, style, customer }: { rows: Row[]; totals: { qty: number; debit: number; credit: number; balance: number }; actions: (r: Row) => React.ReactNode; receipts: Receipt[]; voided: Set<string>; style: LedgerStyle; customer: boolean }) {
   const agent = style === 'agent'
+  const [flow, setFlow] = useState<Flow>('all')
+  const words = FLOW[customer ? 'customer' : 'holder']
+  const isIn = (r: Row) => !r.opening && r.amount > 0
+  const isOut = (r: Row) => !r.opening && r.amount < 0
+  const rows = flow === 'all' ? allRows : allRows.filter(flow === 'in' ? isIn : isOut)
+  const sumIn = allRows.filter(isIn).reduce((t, r) => t + r.amount, 0), sumOut = -allRows.filter(isOut).reduce((t, r) => t + r.amount, 0)
+  const signed = (r: Row, side: 'in' | 'out') =>
+    side === 'in' ? (r.amount > 0 ? <><span className="text-pos">+</span> {f3(r.amount)}</> : '') : r.amount < 0 ? <><span className="text-neg">−</span> {f3(-r.amount)}</> : ''
+  const flowBar = (
+    <div className="flex flex-wrap items-center gap-2 px-4 pt-3 md:px-5">
+      <div className="inline-flex rounded-lg bg-surface-2 p-0.5 text-sm" role="group" aria-label="Show">
+        {(['all', 'in', 'out'] as Flow[]).map((f) => (
+          <button
+            key={f}
+            onClick={() => setFlow(f)}
+            aria-pressed={flow === f}
+            title={f === 'in' ? words.inHint : f === 'out' ? words.outHint : 'every line'}
+            className={cn('rounded-md px-3 py-1 font-medium text-muted', flow === f && 'bg-surface text-fg shadow-sm')}
+          >
+            {f === 'all' ? 'All' : f === 'in' ? <><span className="text-pos">+</span> {words.in}</> : <><span className="text-neg">−</span> {words.out}</>}
+            <span className="ml-1 text-xs text-muted">{f === 'all' ? allRows.filter((r) => !r.opening).length : allRows.filter(f === 'in' ? isIn : isOut).length}</span>
+          </button>
+        ))}
+      </div>
+      <span className="text-xs text-muted tabular-nums">
+        <span className="text-pos">+</span> {words.in.toLowerCase()} {f3(sumIn)} · <span className="text-neg">−</span> {words.out.toLowerCase()} {f3(sumOut)}
+      </span>
+    </div>
+  )
   const col3 = (r: Row) => (agent ? (r.inr != null ? (r.inrEstimated ? '≈ ' : '') + '₹' + r.inr.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '') : r.qty ? f3(r.qty) : '')
   const col4 = (r: Row) => (agent ? (r.sarEq != null ? f3(r.sarEq) : '') : r.rate ? f3(r.rate) : '')
   const struck = (r: Row) => !r.reversal && voided.has(r.ref.id)
@@ -214,11 +250,12 @@ function LedgerTable({ rows, totals, actions, receipts, voided, style }: { rows:
   }
   return (
     <>
+      {flowBar}
       {/* desktop: the book layout */}
       <div className="overflow-x-auto max-md:hidden">
         <table className="mt-3 w-full text-sm tabular-nums">
           <thead className="border-y border-border bg-surface-2 text-xs text-muted">
-            <tr>{['Date', 'Particulars', agent ? '₹' : 'Qty', agent ? 'SAR' : 'Rate', 'Credit', 'Debit', 'Balance', ''].map((h, i) => <th key={i} className={cn('px-3 py-2 font-semibold whitespace-nowrap', i > 1 ? 'text-right' : 'text-left')}>{h}</th>)}</tr>
+            <tr>{['Date', 'Particulars', agent ? '₹' : 'Qty', agent ? 'SAR' : 'Rate', `− ${words.out} (Cr)`, `+ ${words.in} (Dr)`, 'Balance', ''].map((h, i) => <th key={i} className={cn('px-3 py-2 font-semibold whitespace-nowrap', i > 1 ? 'text-right' : 'text-left')}>{h}</th>)}</tr>
           </thead>
           <tbody>
             {rows.map((r) => (
@@ -227,14 +264,14 @@ function LedgerTable({ rows, totals, actions, receipts, voided, style }: { rows:
                 <td className="px-3 py-2">{r.particulars}{tags(r)}<div className="text-xs text-muted no-underline">{sub(r)}</div></td>
                 <td className="px-3 py-2 text-right whitespace-nowrap" title={r.inrEstimated ? "Estimated at the agent's average rate" : undefined}>{col3(r)}</td>
                 <td className="px-3 py-2 text-right">{col4(r)}</td>
-                <td className="px-3 py-2 text-right">{r.amount < 0 ? f3(-r.amount) : ''}</td>
-                <td className="px-3 py-2 text-right">{r.amount > 0 ? f3(r.amount) : ''}</td>
+                <td className="px-3 py-2 text-right whitespace-nowrap">{signed(r, 'out')}</td>
+                <td className="px-3 py-2 text-right whitespace-nowrap">{signed(r, 'in')}</td>
                 <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">{drcr(r.balance)}</td>
                 <td className="px-3 py-2 text-right whitespace-nowrap [&>button+button]:ml-1">{actions(r)}</td>
               </tr>
             ))}
           </tbody>
-          <tfoot className="font-bold">
+          <tfoot className={cn('font-bold', flow !== 'all' && 'hidden')}>
             <tr><td /><td className="px-3 py-2">Total</td><td className="px-3 py-2 text-right">{!agent && totals.qty ? f3(totals.qty) : ''}</td><td /><td className="px-3 py-2 text-right">{f3(totals.credit)}</td><td className="px-3 py-2 text-right">{f3(totals.debit)}</td><td className="px-3 py-2 text-right whitespace-nowrap">{drcr(totals.balance)}</td><td /></tr>
           </tfoot>
         </table>
@@ -249,13 +286,13 @@ function LedgerTable({ rows, totals, actions, receipts, voided, style }: { rows:
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-muted">
                 {agent ? (r.inr != null ? `${col3(r)} · SAR ${col4(r)} · ` : '') : r.qty ? `${f3(r.qty)} × ${f3(r.rate ?? 0)} · ` : ''}
-                {r.amount < 0 ? <span className="text-pos">Credit {f3(-r.amount)}</span> : <span>Debit {f3(r.amount)}</span>}
+                {r.amount < 0 ? <span><span className="text-neg">−</span> {words.out} {f3(-r.amount)}</span> : r.opening ? <span>Opening {f3(r.amount)}</span> : <span><span className="text-pos">+</span> {words.in} {f3(r.amount)}</span>}
               </span>
               <span className="flex gap-1">{actions(r)}</span>
             </div>
           </li>
         ))}
-        <li className="flex justify-between bg-surface-2/60 px-4 py-3 text-sm font-bold tabular-nums"><span>Total{totals.qty ? ` · qty ${f3(totals.qty)}` : ''}</span><span>Cr {f3(totals.credit)} · Dr {f3(totals.debit)}</span></li>
+        <li className={cn('flex justify-between bg-surface-2/60 px-4 py-3 text-sm font-bold tabular-nums', flow !== 'all' && 'hidden')}><span>Total{totals.qty ? ` · qty ${f3(totals.qty)}` : ''}</span><span>Cr {f3(totals.credit)} · Dr {f3(totals.debit)}</span></li>
       </ul>
     </>
   )
