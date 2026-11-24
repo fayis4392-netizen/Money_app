@@ -53,7 +53,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
           <div className="grid size-10 place-items-center rounded-xl bg-accent text-lg font-black text-white">X</div>
           <div>
             <div className="font-bold">Exchange Ledger</div>
-            <div className="text-xs text-muted">SAR → AED → INR</div>
           </div>
         </div>
         {phase === 'checking' || phase === 'loading' ? (

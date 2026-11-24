@@ -74,7 +74,6 @@ export function AppShell() {
           <div className="grid size-9 place-items-center rounded-xl bg-accent text-sm font-black text-accent-fg">X</div>
           <div>
             <div className="text-sm font-bold">Exchange Ledger</div>
-            <div className="text-xs text-muted">SAR → AED → INR</div>
           </div>
         </div>
         {NAV.map((g) => (
