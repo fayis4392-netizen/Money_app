@@ -17,12 +17,12 @@ npm run build    # type-check and build to dist/
 
 ## Supabase (sign-in and shared books)
 
-1. Supabase → **SQL Editor** → paste `supabase/migrations/0001_app_state.sql` → **Run**.
+1. Supabase → **SQL Editor** → run `supabase/migrations/0001_app_state.sql`, then `0002_optimise.sql` (each: paste → **Run**).
 2. **Authentication → Sign In / Providers → Email**: turn **off** "Allow new users to sign up" (internal tool: accounts are created by the owner only).
 3. **Authentication → Users → Add user → Create new user**: email + password, tick **Auto Confirm User**.
 4. Put the project URL and publishable key in `.env.local` (see `.env.example`) and in Vercel → Project → Settings → Environment Variables, then redeploy.
 
-The books are one shared document with a version number: a save is refused if someone else saved first, and the app then shows their latest books. Supabase keeps a restore point every hour (Settings → Data → Restore points). Without the env vars the app keeps its books in the browser.
+The books are one shared document with a version number: a save is refused if someone else saved first, and the app then shows their latest books. Supabase keeps restore points (Settings → Data → Restore points): hourly for 2 days, daily for 30 days, weekly for 6 months, so they stay well inside the free 500 MB. Without the env vars the app keeps its books in the browser.
 
 ## How pricing works
 

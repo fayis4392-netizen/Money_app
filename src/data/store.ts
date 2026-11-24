@@ -198,7 +198,10 @@ export async function connectCloud(): Promise<{ firstTime: boolean }> {
   channel?.unsubscribe()
   channel = supabase!
     .channel('books')
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'app_state' }, async () => {
+    // a tiny row announces each new version; the books are fetched only when it's newer than ours
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'app_state_meta' }, async (msg) => {
+      const announced = Number((msg.new as { version?: number }).version ?? Infinity)
+      if (announced <= cloud.version) return
       if (cloud.saving || cloud.dirty) return // our own save, or one about to happen: its result decides
       try {
         const x = await fetchRemote()
