@@ -32,6 +32,9 @@ create policy "signed in can read the books" on public.app_state for select to a
 drop policy if exists "signed in can read restore points" on public.app_state_history;
 create policy "signed in can read restore points" on public.app_state_history for select to authenticated using (true);
 revoke all on public.app_state, public.app_state_history from anon;
+-- newer Supabase projects don't give signed-in users access to new tables by default
+grant usage on schema public to authenticated;
+grant select on public.app_state, public.app_state_history to authenticated;
 
 -- Save the books if nobody else saved since `expected_version`; returns the new version.
 create or replace function public.save_state(expected_version bigint, new_data jsonb)
