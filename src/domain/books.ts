@@ -51,6 +51,8 @@ export function booksCheck(d: AppData, mode: 'achieved' | 'today' = 'achieved') 
   const open = d.deals.filter((x) => x.status !== 'cancelled' && x.status !== 'completed')
   const toDeliver = open.reduce((t, x) => t + x.inrPayout + (x.distributorId ? x.distributorFeeInr : fee), 0)
   const capital = d.capital.reduce((t, c) => t + (c.kind === 'add' ? 1 : c.kind === 'withdraw' ? -1 : 0) * toInr(c.amount, c.currency), 0)
+  // profit the owner has taken out (valued like the deal method, so the two still agree)
+  const taken = d.capital.reduce((t, c) => t + (c.kind === 'drawings' ? converter(deal)(c.amount, c.currency) : 0), 0)
   const openings = d.parties.reduce((t, p) => t + (p.opening ? toInr(p.opening.amount, OPENING_CURRENCY[p.type]) : 0), 0)
   const booksProfit = owedToYou + operatorCash - youOwe - toDeliver - capital - openings
 
@@ -72,6 +74,9 @@ export function booksCheck(d: AppData, mode: 'achieved' | 'today' = 'achieved') 
     dealsProfit: round2(dealsProfit),
     expenses: round2(expenses),
     dealMethod: round2(dealMethod),
-    difference: round2(booksProfit - dealMethod),
+    taken: round2(taken),
+    /** profit earned and not yet taken by the owner */
+    leftIn: round2(dealMethod - taken),
+    difference: round2(booksProfit - (dealMethod - taken)),
   }
 }

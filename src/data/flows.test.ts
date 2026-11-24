@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { addExpense, addReceipt, addTransfer, editExpense, voidExpense, cancelDeal, editTransfer, voidTransfer, editReceipt, reverseAndReenter, setNarration, voidReceipt, voidPlan, saveParty, setRates, setConfirmer, undoDealStep, UserError } from './actions'
+import { addExpense, addReceipt, addTransfer, editExpense, voidExpense, cancelDeal, editTransfer, voidTransfer, editReceipt, reverseAndReenter, setNarration, voidReceipt, voidPlan, saveParty, setRates, setConfirmer, undoDealStep, capitalEntry, UserError } from './actions'
 import { clearAll, loadSample } from './sample'
 import { getState } from './store'
 import { booksCheck } from '@/domain/books'
@@ -226,5 +226,30 @@ describe('sample books', () => {
     } finally {
       setConfirmer(() => true)
     }
+  })
+
+  it("owner's account: profit left circulates until taken; taking it all leaves just the capital", async () => {
+    const { ownerAccount } = await import('@/domain/owner')
+    const today = '2026-11-24'
+    const before = ownerAccount(getState(), today)
+    const b0 = booksCheck(getState())
+    // the owner's total equals what the books say the business is worth
+    expect(before.balance).toBeCloseTo(b0.booksProfit + b0.capital + b0.openings, 0)
+    expect(before.profitLeft).toBeCloseTo(before.profit, 2)
+
+    // the owner takes all the profit, paid out of operator cash (₹)
+    const cash = getState().parties.find((p) => p.type === 'operator')!
+    const left = Math.round(before.profitLeft)
+    capitalEntry({ kind: 'drawings', amount: left, currency: 'INR', partyId: cash.id, date: '2026-11-20', note: 'November profit' })
+    const after = ownerAccount(getState(), today)
+    expect(after.taken).toBe(left)
+    expect(Math.abs(after.profitLeft)).toBeLessThan(1)
+    expect(after.balance).toBeCloseTo(after.openings + after.capitalIn - after.capitalOut, 0)
+
+    // the books still balance, and agree with the owner's account
+    const b1 = booksCheck(getState())
+    expect(Math.abs(b1.difference)).toBeLessThan(1)
+    expect(b1.taken).toBe(left)
+    expect(after.balance).toBeCloseTo(b1.booksProfit + b1.capital + b1.openings, 0)
   })
 })

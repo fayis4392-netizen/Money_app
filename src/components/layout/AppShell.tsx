@@ -28,7 +28,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     { to: '/statements', label: 'Customer statements', short: 'Statements', icon: FileUser },
   ] },
   { group: 'Finance', items: [
-    { to: '/capital', label: 'Capital', icon: Landmark },
+    { to: '/capital', label: "Owner's account", short: 'Owner', icon: Landmark },
     { to: '/expenses', label: 'Expenses', icon: Wallet },
     { to: '/balances', label: 'Debtors & Creditors', icon: Scale },
   ] },

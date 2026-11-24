@@ -511,7 +511,7 @@ export function voidTransfer(id: string, reason: string, withDependents = false)
 
 /* ======================= operator capital ======================= */
 const capitalSchema = z.object({
-  kind: z.enum(['add', 'withdraw', 'transfer']),
+  kind: z.enum(['add', 'withdraw', 'drawings', 'transfer']),
   amount: positive('the amount'),
   currency: z.enum(['SAR', 'AED', 'INR']),
   partyId: z.string().min(1, 'Choose where the money is'),

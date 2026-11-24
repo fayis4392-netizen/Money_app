@@ -114,6 +114,7 @@ export function deriveLines(d: AppData): PartyLine[] {
     const note = c.note ? ' · ' + c.note : ''
     if (c.kind === 'add') add({ partyId: c.partyId, currency: c.currency, date: at, particulars: 'Capital added' + note, amount: c.amount, ref, sub: c.entryNo })
     if (c.kind === 'withdraw') add({ partyId: c.partyId, currency: c.currency, date: at, particulars: 'Capital withdrawn' + note, amount: -c.amount, ref, sub: c.entryNo })
+    if (c.kind === 'drawings') add({ partyId: c.partyId, currency: c.currency, date: at, particulars: 'Profit taken by owner' + note, amount: -c.amount, ref, sub: c.entryNo })
     if (c.kind === 'transfer') {
       add({ partyId: c.partyId, currency: c.currency, date: at, particulars: 'Moved to ' + name(c.toPartyId!) + note, amount: -c.amount, ref, sub: c.entryNo })
       add({ partyId: c.toPartyId!, currency: c.currency, date: at, particulars: 'Funds from ' + name(c.partyId) + note, amount: c.amount, ref, sub: c.entryNo })

@@ -42,14 +42,20 @@ export function BooksCheck() {
           <Row label="Still to deliver in India" sub={`${b.openDeals} open deals, with fees`} value={b.toDeliver} sign="−" />
           <Row label="Capital put in" value={b.capital} sign="−" />
           <Row label="Opening balances from the old books" value={b.openings} sign="−" />
-          <Row label="Profit by the books" value={b.booksProfit} strong />
+          <Row label={b.taken ? 'Profit left in the business' : 'Profit by the books'} value={b.booksProfit} strong />
         </div>
         <div className="grid content-start gap-3">
           <div className="rounded-xl bg-surface-2 p-3">
             <div className="mb-1 text-xs font-bold tracking-wide text-muted uppercase">Deal method</div>
             <Row label="Profit on deals" value={b.dealsProfit} />
             <Row label="Expenses" value={b.expenses} sign="−" />
-            <Row label="Net profit" value={b.dealMethod} strong />
+            <Row label="Net profit" value={b.dealMethod} strong={!b.taken} />
+            {b.taken > 0 && (
+              <>
+                <Row label="Profit taken by the owner" value={b.taken} sign="−" />
+                <Row label="Left in the business" value={b.leftIn} strong />
+              </>
+            )}
           </div>
           <div className={cn('rounded-xl p-3', mode === 'achieved' ? (agrees ? 'bg-emerald-500/10' : 'bg-red-500/10') : 'bg-amber-500/10')}>
             <div className="flex items-baseline justify-between gap-3 font-bold">

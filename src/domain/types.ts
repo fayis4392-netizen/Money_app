@@ -230,7 +230,8 @@ export interface Transfer {
   createdAt: string
 }
 
-export type CapitalKind = 'add' | 'withdraw' | 'transfer'
+/** add/withdraw: the owner's capital · drawings: profit the owner takes · transfer: moved between holders */
+export type CapitalKind = 'add' | 'withdraw' | 'drawings' | 'transfer'
 export interface CapitalEntry {
   id: string
   entryNo: string
