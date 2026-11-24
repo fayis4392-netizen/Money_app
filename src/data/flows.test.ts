@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { addExpense, addReceipt, addTransfer, editExpense, voidExpense, cancelDeal, editTransfer, voidTransfer, editReceipt, reverseAndReenter, setNarration, voidReceipt, voidPlan, saveParty, setRates, UserError } from './actions'
+import { addExpense, addReceipt, addTransfer, editExpense, voidExpense, cancelDeal, editTransfer, voidTransfer, editReceipt, reverseAndReenter, setNarration, voidReceipt, voidPlan, saveParty, setRates, setConfirmer, undoDealStep, UserError } from './actions'
 import { clearAll, loadSample } from './sample'
 import { getState } from './store'
 import { booksCheck } from '@/domain/books'
@@ -196,5 +196,35 @@ describe('sample books', () => {
     clearAll()
     expect(getState().deals).toHaveLength(0)
     expect(getState().settings.dubaiQuote).toBe(36.39)
+  })
+
+  it('a deal marked paid by mistake can be stepped back, and its distributor lines go with it', () => {
+    const d = getState().deals.find((x) => x.status === 'completed')!
+    const before = balances(getState())[d.distributorId!].INR
+    expect(() => undoDealStep(d.id, '')).toThrow(UserError)
+    undoDealStep(d.id, 'recipient not paid yet')
+    const after = getState().deals.find((x) => x.id === d.id)!
+    expect(after.status).toBe('out_for_delivery')
+    expect(after.history.at(-1)!.note).toMatch(/Delivery undone: recipient not paid yet/)
+    expect(balances(getState())[d.distributorId!].INR).toBeCloseTo(before + d.inrPayout + d.distributorFeeInr, 2)
+  })
+
+  it('asks before saving unusual entries, and saves only on yes', () => {
+    const cust = getState().parties.find((p) => p.type === 'saudi_customer')!
+    const sc = getState().transfers.find((t) => t.kind === 'send')!.fromId
+    const asked: string[] = []
+    setConfirmer((m) => (asked.push(m), false))
+    try {
+      expect(() => addReceipt({ customerId: cust.id, collectorId: sc, amount: 5_000_000, date: '2026-11-20' })).toThrow(/Not saved/)
+      expect(() => addExpense({ date: '2026-11-20', paidById: sc, currency: 'INR', amount: 1000, category: 'Salary' })).toThrow(/Not saved/)
+      expect(() => saveParty({ ...cust, active: false })).toThrow(/Not saved/)
+      expect(asked[0]).toMatch(/extra zero/)
+      expect(asked[1]).toMatch(/doesn't normally hold INR/)
+      expect(asked[2]).toMatch(/still has a balance/)
+      setConfirmer(() => true)
+      expect(addReceipt({ customerId: cust.id, collectorId: sc, amount: 5_000_000, date: '2026-11-20' }).amount).toBe(5_000_000)
+    } finally {
+      setConfirmer(() => true)
+    }
   })
 })

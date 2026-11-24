@@ -1,7 +1,7 @@
 import { deliveryFee } from '@/domain/pricing'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { advanceDeal, cancelDeal, reassignDistributor } from '@/data/actions'
+import { advanceDeal, cancelDeal, reassignDistributor, undoDealStep } from '@/data/actions'
 import { useData } from '@/data/store'
 import { canCorrect, dealProfit } from '@/domain/derive'
 import { dmy, fdt, lakh, money, rate } from '@/domain/format'
@@ -16,6 +16,7 @@ export default function DealDetail() {
   const d = data.deals.find((x) => x.id === id)
   const { correctDeal } = useDealDialog()
   const [cancelling, setCancelling] = useState(false)
+  const [undoing, setUndoing] = useState(false)
   const [reassign, setReassign] = useState(false)
   if (!d) return <Card><Empty>Deal not found. <Link className="text-accent" to="/deals">Back to deals</Link></Empty></Card>
 
@@ -46,6 +47,7 @@ export default function DealDetail() {
           {d.status === 'assigned' && <Button onClick={() => setReassign(true)}>Change distributor</Button>}
           {canCorrect(d) && <Button onClick={() => correctDeal(d)}>Correct</Button>}
           {canCorrect(d) && <Button variant="danger" onClick={() => setCancelling(true)}>Cancel deal</Button>}
+          {(d.status === 'completed' || d.status === 'out_for_delivery') && <Button onClick={() => setUndoing(true)}>{d.status === 'completed' ? 'Undo paid' : 'Undo out for delivery'}</Button>}
         </div>
       </div>
 
@@ -101,6 +103,14 @@ export default function DealDetail() {
         </ol>
       </Card>
 
+      <ReasonDialog
+        open={undoing}
+        title={`${d.status === 'completed' ? 'Undo paid' : 'Undo out for delivery'} · ${d.dealNo}`}
+        message={d.status === 'completed' ? `Back to "out for delivery". The payment to ${d.recipientName} and the delivery charge come off ${name(d.distributorId)}'s ledger. Kept in the deal's history.` : 'Back to "assigned". Kept in the deal\'s history.'}
+        confirm="Undo"
+        onClose={() => setUndoing(false)}
+        onConfirm={(r) => attempt(() => undoDealStep(d.id, r), 'Step undone')}
+      />
       <ReasonDialog open={cancelling} title={`Cancel ${d.dealNo}`} message="The SAR is reversed out of the customer's ledger. This cannot be undone." confirm="Cancel deal" danger onClose={() => setCancelling(false)} onConfirm={(r) => attempt(() => cancelDeal(d.id, r), 'Deal cancelled · reversal posted')} />
       <Dialog open={reassign} onClose={() => setReassign(false)} title={`Change distributor · ${d.dealNo}`} footer={<><Button onClick={() => setReassign(false)}>Cancel</Button><Button variant="primary" type="submit" form="reassign-form">Save</Button></>}>
         {reassign && (

@@ -1,4 +1,4 @@
-import { Check, Circle, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useData } from '@/data/store'
@@ -11,12 +11,6 @@ import { deliveryFee, inrPerSar, priceDeal, suggestCustomerRate } from '@/domain
 import { Button, Card, CardHeader, Empty, Stat } from '@/components/ui'
 import { useDealDialog } from '@/components/deal/context'
 import { DealTable } from './Deals'
-
-const PLAN: { phase: string; done: boolean; items: string[] }[] = [
-  { phase: 'Phase 1 · Foundation', done: true, items: ['App layout for desktop and phone', "Today's rates with history", 'Premium slabs and defaults', 'Pricing and ledger maths, tested'] },
-  { phase: 'Phase 2 · Core', done: true, items: ['Customers, collectors, distributors', 'New deal with distributor up front', 'Cash received, opening balances', 'Ledgers with edits, PDF and Excel export'] },
-  { phase: 'Phase 3 · Full chain', done: true, items: ['Transfers SAR → Dubai → AED → ₹', 'Dubai agent payments to distributors', 'Capital, debtors and creditors, reports', 'Next: Supabase logins and go-live'] },
-]
 
 export default function Dashboard() {
   const data = useData()
@@ -64,24 +58,6 @@ export default function Dashboard() {
             <dt className="text-muted">Distributor fee {money(deliveryFee(100_000, s.distributorFeePerLakh), 'INR')}</dt><dd className="text-right">{money(sample.feeSar, 'SAR')}</dd>
             <dt className="font-semibold">Profit</dt><dd className="text-right font-bold text-pos">{money(sample.profitSar, 'SAR')}</dd>
           </dl>
-        </Card>
-        <Card>
-          <CardHeader title="Build progress" />
-          <div className="grid gap-3 md:grid-cols-3">
-            {PLAN.map((p) => (
-              <div key={p.phase} className="rounded-xl bg-surface-2 p-3">
-                <div className="mb-2 text-sm font-bold">{p.phase}</div>
-                <ul className="grid gap-1.5 text-xs">
-                  {p.items.map((i) => (
-                    <li key={i} className="flex gap-2 text-muted">
-                      {p.done ? <Check className="size-3.5 shrink-0 text-pos" /> : <Circle className="size-3.5 shrink-0" />}
-                      <span className={p.done ? 'text-fg' : ''}>{i}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
         </Card>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { ArrowLeftRight, FileDown, FileSpreadsheet, HandCoins, Handshake, Landmark, Plus, Send } from 'lucide-react'
+import { ArrowLeftRight, FileDown, MessageCircle, FileSpreadsheet, HandCoins, Handshake, Landmark, Plus, Send } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -11,7 +11,8 @@ import { useData } from '@/data/store'
 import { canCorrect, deriveLines, partyStatement, type PartyLine } from '@/domain/derive'
 import { dmy, drcr, f3, fdt, todayStr } from '@/domain/format'
 import { OPENING_CURRENCY, PARTY_TYPE_LABEL, type Currency, type Expense, type Party, type Receipt, type Transfer, type TransferKind } from '@/domain/types'
-import { exportLedgerCsv, exportLedgerPdf, fileName, type LedgerStyle } from '@/lib/export'
+import { exportLedgerCsv, exportLedgerPdf, fileName, ledgerPdfFile, type LedgerStyle } from '@/lib/export'
+import { WhatsAppDialog, type WhatsAppShare } from '@/components/WhatsAppDialog'
 import { attempt, cn } from '@/lib/utils'
 import { Badge, Button, Card, Dialog, Empty, Field, Input, ReasonDialog, Select } from '@/components/ui'
 import { PartyDialog } from '@/components/party/PartyDialog'
@@ -34,6 +35,7 @@ export default function PartyLedger() {
   const [voidingTr, setVoidingTr] = useState<Transfer | null>(null)
   const [capital, setCapital] = useState(false)
   const [voidingExp, setVoidingExp] = useState<Expense | null>(null)
+  const [whatsapp, setWhatsapp] = useState<WhatsAppShare | null>(null)
   const { correctDeal, newDeal } = useDealDialog()
   // the Dubai agent's AED account shows ₹ and SAR beside each line instead of qty and rate
   const styleFor = (cur: Currency): LedgerStyle => (p?.type === 'dubai_agent' && cur === 'AED' ? 'agent' : 'books')
@@ -151,12 +153,25 @@ export default function PartyLedger() {
             {s.rows.length ? <LedgerTable rows={s.rows as Row[]} totals={s.totals} actions={rowActions} receipts={data.receipts} voided={voided} style={styleFor(cur)} /> : <Empty>No entries in this period</Empty>}
             <div className="flex justify-end gap-2 border-t border-border px-4 py-3 md:px-5">
               <Button size="sm" onClick={() => exportLedgerCsv(title, s, name, styleFor(cur))}><FileSpreadsheet /> Excel (CSV)</Button>
-              <Button size="sm" variant="primary" onClick={() => exportLedgerPdf(title, s, name, styleFor(cur)).catch((e) => toast.error('PDF failed: ' + (e as Error).message))}><FileDown /> PDF</Button>
+              <Button size="sm" onClick={() => exportLedgerPdf(title, s, name, styleFor(cur)).catch((e) => toast.error('PDF failed: ' + (e as Error).message))}><FileDown /> PDF</Button>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() =>
+                  ledgerPdfFile(title, s, name, styleFor(cur)).then(
+                    (file) => setWhatsapp({ file, phone: p.phone ?? '', name: p.name, message: statementMessage(p.name, cur, s.totals.balance, range.to || todayStr(), p.type === 'saudi_customer') }),
+                    (e) => toast.error('PDF failed: ' + (e as Error).message),
+                  )
+                }
+              >
+                <MessageCircle /> WhatsApp
+              </Button>
             </div>
           </Card>
         )
       })}
 
+      <WhatsAppDialog share={whatsapp} onClose={() => setWhatsapp(null)} />
       <TransferDialog open={!!transfer} kind={transfer?.kind ?? 'send'} edit={transfer?.edit} preset={transfer?.preset} onClose={() => setTransfer(null)} />
       <VoidDialog target={voidingTr && { kind: 'transfer', id: voidingTr.id }} no={voidingTr?.no} onClose={() => setVoidingTr(null)} />
       <CapitalDialog open={capital} partyId={p.id} onClose={() => setCapital(false)} />
@@ -282,4 +297,14 @@ function ReceiptForm({ customer, edit, onDone }: { customer: Party; edit?: Recei
       {edit && <Field className="col-span-2" label="Reason for change"><Input value={f.reason} onChange={set('reason')} required placeholder="Kept in the edit history" /></Field>}
     </form>
   )
+}
+
+/** The note sent with a statement: the balance, and which way it runs. */
+function statementMessage(name: string, cur: Currency, balance: number, asOn: string, customer: boolean) {
+  const amt = `${cur} ${Math.abs(balance).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`
+  const line =
+    Math.abs(balance) < 0.0005 ? 'Your account is clear (nothing due).'
+    : customer ? (balance > 0 ? `Balance due from you: ${amt}.` : `Balance in your favour (paid in advance): ${amt}.`)
+    : `Balance: ${amt} ${balance > 0 ? 'Dr' : 'Cr'}.`
+  return `Dear ${name},\n\nYour account statement as on ${dmy(asOn)} is attached.\n${line}\n\nPlease check it and let us know if anything is different.\nThank you.`
 }

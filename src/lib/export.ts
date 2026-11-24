@@ -89,6 +89,14 @@ export async function exportLedgerPdf(title: string, s: Statement, name: string,
   download(name + '.pdf', (await drawLedgers([{ title, s, style }])).output('blob'))
 }
 
+/** The ledger PDF as a file (for sharing), without downloading it. */
+export async function ledgerPdfFile(title: string, s: Statement, name: string, style: LedgerStyle = 'books') {
+  return new File([(await drawLedgers([{ title, s, style }])).output('blob')], name + '.pdf', { type: 'application/pdf' })
+}
+
+/** Save a file the user already has (e.g. a PDF made for sharing). */
+export const downloadFile = (f: File) => download(f.name, f)
+
 /** Several ledgers in one PDF, each starting on a new page. */
 export async function exportLedgersPdf(items: { title: string; s: Statement; style?: LedgerStyle }[], name: string) {
   download(name + '.pdf', (await drawLedgers(items)).output('blob'))

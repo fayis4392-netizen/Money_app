@@ -60,7 +60,7 @@ export function deriveLines(d: AppData): PartyLine[] {
     }
     if (x.status === 'completed' && x.distributorId) {
       // the distributor paid the recipient out of cash they hold for the operator
-      const at = x.history.find((h) => h.status === 'completed')!.at
+      const at = x.history.findLast((h) => h.status === 'completed')!.at
       add({ partyId: x.distributorId, currency: 'INR', date: at, particulars: 'Paid to recipient ' + x.recipientName, amount: -x.inrPayout, ref, sub: x.dealNo })
       add({ partyId: x.distributorId, currency: 'INR', date: at, particulars: 'Delivery charge', amount: -x.distributorFeeInr, ref, sub: x.dealNo })
     }

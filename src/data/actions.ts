@@ -8,6 +8,24 @@ import type { Currency } from '@/domain/types'
 
 export class UserError extends Error {}
 
+/**
+ * Asks "are you sure?" for things that are allowed but often a typo (the screens show a dialog;
+ * tests and imports say yes). Returns false to stop.
+ */
+let confirmer: (message: string) => boolean = () => true
+export const setConfirmer = (fn: (message: string) => boolean) => (confirmer = fn)
+const sure = (message: string) => {
+  if (!confirmer(message)) throw new UserError('Not saved')
+}
+
+/** Amounts far above normal: usually an extra zero. */
+const BIG: Record<Currency, number> = { SAR: 300_000, AED: 300_000, INR: 10_000_000 }
+const checkSize = (amount: number, cur: Currency) => {
+  if (amount > BIG[cur]) sure(`${cur} ${amount.toLocaleString('en-IN')} is a very large amount. Is it right (no extra zero)?`)
+}
+/** Currencies each kind of party normally holds. */
+const HOLDS: Record<PartyType, Currency[]> = { saudi_customer: ['SAR'], saudi_collector: ['SAR'], dubai_collector: ['SAR', 'AED'], dubai_agent: ['AED'], distributor: ['INR'], operator: ['SAR', 'AED', 'INR'] }
+
 function check<T>(schema: z.ZodType<T>, input: unknown): T {
   const r = schema.safeParse(input)
   if (!r.success) throw new UserError(r.error.issues[0]?.message ?? 'Check the form')
@@ -117,6 +135,11 @@ export function saveParty(input: unknown): Party {
   const fields = { name: v.name, phone: v.phone, regionId: v.type === 'distributor' ? v.regionId : undefined, notes: v.notes, active: v.active, opening, feePerLakh }
   if (v.id) {
     const old = party(v.id) ?? fail('Party not found')
+    if (old.active && !v.active) {
+      const b = balances(getState())[old.id] ?? {}
+      const open = (Object.entries(b) as [Currency, number][]).filter(([, n]) => Math.abs(n) > 0.0005)
+      if (open.length) sure(`${old.name} still has a balance (${open.map(([c, n]) => `${c} ${drcr(n)}`).join(', ')}). Make them inactive anyway? They'll be hidden from new entries but the balance stays.`)
+    }
     const desc = (o?: Party['opening']) => (o ? `${drcr(o.amount)} on ${dmy(o.date)}` : 'none')
     const edits = [...(old.edits ?? [])]
     if (desc(old.opening) !== desc(opening)) edits.push({ at: now(), what: 'Opening balance', from: desc(old.opening), to: desc(opening) })
@@ -156,6 +179,7 @@ function buildDeal(input: unknown, at: string): Deal {
   if (dist!.regionId !== v.regionId) fail(`${dist!.name} does not deliver in that region`)
   if (v.customerRate > v.dubaiQuote * 1.3 || v.customerRate < v.dubaiQuote * 0.9) fail(`Customer rate ${v.customerRate} is far from the Dubai quote ${v.dubaiQuote}: check for a typo`)
   const inr = Math.round(v.inrK * 1000 * 100) / 100
+  checkSize(inr, 'INR')
   const sl = slabFor(inr, st.settings.slabs)
   const suggested = round4(v.dubaiQuote + (sl?.premium ?? 0))
   const rate = round4(v.customerRate)
@@ -233,6 +257,17 @@ export function reassignDistributor(id: string, distributorId: string, fee: unkn
   setState((s) => ({ ...s, deals: s.deals.map((d) => (d.id === id ? next : d)) }))
 }
 
+/** Step a deal back (delivered by mistake → out for delivery → assigned), with a reason kept in its history. */
+export function undoDealStep(id: string, reason: string) {
+  const x = getState().deals.find((d) => d.id === id) ?? fail('Deal not found')
+  if (!reason?.trim()) fail('Give a reason')
+  const back = ({ completed: 'out_for_delivery', out_for_delivery: 'assigned' } as Partial<Record<DealStatus, DealStatus>>)[x.status]
+  if (!back) fail('Nothing to undo for this deal')
+  const what = x.status === 'completed' ? 'Delivery undone' : 'Out for delivery undone'
+  const next = { ...x, status: back!, history: [...x.history, { status: back!, at: now(), note: `${what}: ${reason.trim()}` }] }
+  setState((s) => ({ ...s, deals: s.deals.map((d) => (d.id === id ? next : d)) }))
+}
+
 export function advanceDeal(id: string) {
   const x = getState().deals.find((d) => d.id === id) ?? fail('Deal not found')
   const nextStatus = ({ assigned: 'out_for_delivery', out_for_delivery: 'completed' } as Partial<Record<DealStatus, DealStatus>>)[x.status]
@@ -256,6 +291,7 @@ export function addReceipt(input: unknown): Receipt {
   const v = check(receiptSchema, input)
   if (party(v.customerId)?.type !== 'saudi_customer') fail('Choose a customer')
   if (party(v.collectorId)?.type !== 'saudi_collector') fail('Choose the Saudi collector who received the cash')
+  checkSize(v.amount, 'SAR')
   const n = getState().counters.receipt + 1
   const r: Receipt = { id: uid(), receiptNo: 'R-' + String(n).padStart(4, '0'), ...v, amount: round3(v.amount), edits: [], createdAt: now() }
   setState((s) => ({ ...s, receipts: [...s.receipts, r], counters: { ...s.counters, receipt: n } }))
@@ -416,6 +452,7 @@ function transferFields(input: unknown): TransferFields {
   // a typed-over result may be rounded, not wildly different
   const calc = v.kind === 'exchange' ? v.amount / rate! : v.kind === 'payout' ? (v.amount / 1000) * rate! : 0
   if (v.result && calc && Math.abs(v.result - calc) / calc > 0.02) fail(`AED ${v.result} is far from what the rate gives (AED ${f3(calc)}): check it`)
+  checkSize(v.amount, v.kind === 'payout' ? 'INR' : v.kind === 'settle' ? 'AED' : 'SAR')
   const base = { kind: v.kind, date: v.date, fromId: v.fromId, toId: toType ? v.toId : undefined, note: v.note }
   switch (v.kind) {
     case 'send': return { ...base, sar: round3(v.amount) }
@@ -486,6 +523,7 @@ const capitalSchema = z.object({
 export function capitalEntry(input: unknown): CapitalEntry {
   const v = check(capitalSchema, input)
   if (!party(v.partyId)) fail('Choose where the money is')
+  checkSize(v.amount, v.currency)
   if (v.kind === 'transfer') {
     if (!v.toPartyId) fail('Choose who receives the money')
     if (v.toPartyId === v.partyId) fail('From and to must be different')
@@ -515,6 +553,8 @@ function expenseFields(input: unknown) {
   const v = check(expenseSchema, input)
   const p = party(v.paidById)
   if (!p || p.type === 'saudi_customer') fail('Choose who paid: a collector, agent, distributor or operator cash')
+  if (!HOLDS[p!.type].includes(v.currency)) sure(`${p!.name} doesn't normally hold ${v.currency} (they hold ${HOLDS[p!.type].join(' / ')}). The expense will show on a separate ${v.currency} ledger for them. Save it in ${v.currency} anyway?`)
+  checkSize(v.amount, v.currency)
   return { ...v, amount: round3(v.amount) }
 }
 
