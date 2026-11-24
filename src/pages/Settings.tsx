@@ -8,6 +8,7 @@ import { deliveryFee, inrPerSar, round4 } from '@/domain/pricing'
 import { attempt } from '@/lib/utils'
 import { Button, Card, CardHeader, Dialog, Field, Input, Stat } from '@/components/ui'
 import { clearAll, loadSample } from '@/data/sample'
+import { backUpToDrive } from '@/data/backup'
 import { RatesDialog } from '@/components/layout/RatesDialog'
 
 export default function SettingsPage() {
@@ -142,6 +143,18 @@ export function DataCard() {
   const counts = useAppState((x) => x.deals.length + ' deals · ' + x.parties.length + ' parties · ' + x.receipts.length + ' cash entries')
   const online = useSyncStatus() !== 'local'
   const fileInput = useRef<HTMLInputElement>(null)
+  const lastDrive = useAppState((x) => x.settings.lastDriveBackup)
+  const [driving, setDriving] = useState(false)
+  const toDrive = async () => {
+    setDriving(true)
+    try {
+      const r = await backUpToDrive()
+      toast.success(<span>Saved to Google Drive: {r.fileName} · <a className="underline" href={r.folderUrl} target="_blank" rel="noreferrer">open folder</a></span>)
+    } catch (e) {
+      toast.error('Drive backup failed: ' + (e as Error).message)
+    }
+    setDriving(false)
+  }
 
   const backup = () => {
     const blob = new Blob([JSON.stringify(getState(), null, 1)], { type: 'application/json' })
@@ -191,14 +204,18 @@ export function DataCard() {
     <Card>
       <CardHeader title="Data" sub={<>{online ? 'Saved online and shared by everyone who signs in.' : 'Stored in this browser only.'} Now: {counts}.</>} />
       <div className="flex flex-wrap gap-2">
-        <Button variant="primary" onClick={backup}>Download backup</Button>
+        <Button variant="primary" onClick={toDrive} disabled={driving}>{driving ? 'Backing up…' : 'Back up to Google Drive'}</Button>
+        <Button onClick={backup}>Download backup</Button>
         <Button onClick={() => fileInput.current?.click()}>Restore from backup file</Button>
         <input ref={fileInput} type="file" accept="application/json,.json" className="hidden" onChange={(e) => pickFile(e.target.files?.[0])} />
         {online && <Button onClick={showPoints}>Restore points</Button>}
         <Button onClick={() => setAsk('sample')}>Load sample data</Button>
         <Button variant="danger" onClick={() => setAsk('clear')}>Clear all data</Button>
       </div>
-      <p className="mt-2 text-xs text-muted">Download a backup now and then and keep it somewhere safe (e.g. Google Drive).{online ? ' Supabase also keeps a restore point every hour while people work, for six months.' : ''}</p>
+      <p className="mt-2 text-xs text-muted">
+        {lastDrive ? <>Last Google Drive backup: <b className="text-fg">{fdt(lastDrive.at)}</b>{lastDrive.by ? ` by ${lastDrive.by}` : ''}{lastDrive.folderUrl && <> · <a className="text-accent underline" href={lastDrive.folderUrl} target="_blank" rel="noreferrer">open folder</a></>}. </> : 'No Google Drive backup yet. '}
+        Backups go to the folder "Exchange Ledger Backups" in the Google account you choose; the app can't see anything else in that Drive.{online ? ' Supabase also keeps a restore point every hour while people work, for six months.' : ''}
+      </p>
       {points && (
         <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-border">
           {points.length ? (

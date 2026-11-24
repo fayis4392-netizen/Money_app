@@ -1,7 +1,10 @@
 import { Wallet, ChartColumn, FileUser, Ellipsis, Landmark, LayoutDashboard, Menu, Plus, ReceiptText, Scale, Settings, Truck, Users, type LucideIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { hasUnsaved, useAppState, useSyncStatus, type SyncStatus } from '@/data/store'
+import { getState, hasUnsaved, useAppState, useSyncStatus, type SyncStatus } from '@/data/store'
+import { backUpToDrive, driveBackupDue } from '@/data/backup'
+import { driveConnected } from '@/lib/drive'
+import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { rate } from '@/domain/format'
 import { cn } from '@/lib/utils'
@@ -81,6 +84,7 @@ export function AppShell() {
           </nav>
         ))}
         <SyncBox />
+        <DriveReminder />
       </aside>
 
       <div className="min-w-0">
@@ -149,4 +153,28 @@ function SyncBox() {
       )}
     </div>
   )
+}
+
+/**
+ * Once a day: back up to Google Drive. If Google was already approved in this session it just
+ * runs; otherwise it asks with a button (Google's window may only open from a click).
+ */
+function DriveReminder() {
+  const status = useSyncStatus()
+  useEffect(() => {
+    if (status !== 'saved' && status !== 'local') return // books not loaded yet
+    const key = 'exchange-ledger:drive-reminded'
+    try {
+      if (sessionStorage.getItem(key)) return
+      sessionStorage.setItem(key, '1')
+    } catch {
+      /* private mode: remind anyway */
+    }
+    if (!driveBackupDue() || getState().parties.length === 0) return
+    const run = () =>
+      toast.promise(backUpToDrive(), { loading: 'Backing up to Google Drive…', success: (r) => 'Daily backup saved to Google Drive: ' + r.fileName, error: (e) => 'Drive backup failed: ' + (e as Error).message })
+    if (driveConnected()) run()
+    else toast('No Google Drive backup in the last day', { description: 'Takes a few seconds.', duration: 20000, action: { label: 'Back up now', onClick: run } })
+  }, [status])
+  return null
 }

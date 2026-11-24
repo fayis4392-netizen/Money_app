@@ -86,7 +86,7 @@ export interface RateUpdate {
 export interface Settings {
   /** Dubai agent's quote today, AED per ₹1,000 */
   dubaiQuote: number
-  /** AED received for 1 SAR */
+  /** SAR given for 1 AED (about 1.02) */
   sarPerAed: number
   slabs: PremiumSlab[]
   /** distributor's delivery charge: ₹ per ₹1,00,000 delivered (each distributor can have their own) */
@@ -94,11 +94,13 @@ export interface Settings {
   saleNarration: string
   receiptNarration: string
   rateLog: RateUpdate[]
+  /** the last backup saved to Google Drive */
+  lastDriveBackup?: { at: string; by?: string; fileName: string; folderUrl?: string }
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   dubaiQuote: 36.5,
-  sarPerAed: 0.979,
+  sarPerAed: 1.0215,
   slabs: [
     { minInr: 0, premium: 2 },
     { minInr: 500_000, premium: 1.8 },

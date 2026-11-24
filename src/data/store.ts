@@ -77,6 +77,8 @@ export function normalize(input: unknown): AppData {
     if (d.settings) delete (d.settings as unknown as Record<string, unknown>).defaultDistributorFeeInr
     migrateToSarPerAed(d)
     if (d.transfers) d.transfers = migrateAgentToAed(d.transfers, { ...DEFAULT_SETTINGS, ...d.settings }.dubaiQuote)
+    // books started before the rate was turned round kept the old default (0.979 AED per SAR)
+    if (d.settings && typeof d.settings.sarPerAed === 'number' && d.settings.sarPerAed > 0 && d.settings.sarPerAed < 1) d.settings.sarPerAed = Math.round((1 / d.settings.sarPerAed) * 1e4) / 1e4
     const e = emptyData()
     return { ...e, ...d, version: 2, settings: { ...DEFAULT_SETTINGS, ...d.settings }, counters: { ...e.counters, ...d.counters } }
 }
