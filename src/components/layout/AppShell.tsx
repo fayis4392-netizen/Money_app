@@ -1,5 +1,5 @@
 import { Wallet, ChartColumn, TrendingUp, FileUser, Ellipsis, Landmark, LayoutDashboard, Menu, Plus, ReceiptText, Scale, Settings, Truck, Users, type LucideIcon } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { getState, hasUnsaved, useAppState, useSyncStatus, type SyncStatus } from '@/data/store'
 import { backUpToDrive, driveBackupDue } from '@/data/backup'
@@ -102,7 +102,10 @@ export function AppShell() {
           </Button>
         </header>
         <main className="mx-auto w-full max-w-[1280px] px-4 pt-5 pb-28 md:px-6 lg:pb-10">
-          <Outlet />
+          {/* pages load on demand; keep the sidebar while one loads */}
+          <Suspense fallback={<div className="py-10 text-center text-sm text-muted">Loading…</div>}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
 

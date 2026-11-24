@@ -217,6 +217,29 @@ export async function connectCloud(): Promise<{ firstTime: boolean }> {
   return { firstTime: r.version === 0 }
 }
 
+/**
+ * A phone that slept, or a tab left in the background, can miss live updates.
+ * When it's shown again, check the version and load newer books if someone saved meanwhile.
+ */
+async function catchUp() {
+  if (!cloud.on || cloud.saving || cloud.dirty || document.visibilityState !== 'visible') return
+  try {
+    const { data, error } = await supabase!.from('app_state_meta').select('version').eq('id', 1).single()
+    if (error || Number(data.version) <= cloud.version) return
+    const x = await fetchRemote()
+    if (x.version > cloud.version && !cloud.saving && !cloud.dirty) {
+      cloud.version = x.version
+      replaceState(normalize(x.data))
+    }
+  } catch {
+    /* offline: the next save or visit will catch up */
+  }
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => void catchUp())
+  window.addEventListener('online', () => void catchUp())
+}
+
 /** First time on Supabase: start the shared books from these. */
 export function seedCloud(d: AppData) {
   setState(() => normalize(d))
