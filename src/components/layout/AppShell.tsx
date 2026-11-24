@@ -1,4 +1,4 @@
-import { Wallet, ChartColumn, FileUser, Ellipsis, Landmark, LayoutDashboard, Menu, Plus, ReceiptText, Scale, Settings, Truck, Users, type LucideIcon } from 'lucide-react'
+import { Wallet, ChartColumn, TrendingUp, FileUser, Ellipsis, Landmark, LayoutDashboard, Menu, Plus, ReceiptText, Scale, Settings, Truck, Users, type LucideIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { getState, hasUnsaved, useAppState, useSyncStatus, type SyncStatus } from '@/data/store'
@@ -32,7 +32,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     { to: '/expenses', label: 'Expenses', icon: Wallet },
     { to: '/balances', label: 'Debtors & Creditors', icon: Scale },
   ] },
-  { group: 'Insights', items: [{ to: '/reports', label: 'Reports', icon: ChartColumn }] },
+  { group: 'Insights', items: [{ to: '/profit-loss', label: 'Profit & Loss', short: 'P&L', icon: TrendingUp }, { to: '/reports', label: 'Reports', icon: ChartColumn }] },
   { group: 'System', items: [{ to: '/settings', label: 'Settings', icon: Settings }] },
 ]
 const ALL = NAV.flatMap((g) => g.items)

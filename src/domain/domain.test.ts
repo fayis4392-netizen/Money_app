@@ -59,3 +59,24 @@ describe('delivery fee per lakh', () => {
     expect(deliveryFee(2_500_000, 250)).toBe(6250)
   })
 })
+
+describe('profit and loss', () => {
+  it('sales − paid out = gross; − delivery − expenses = net; months add up to the period', async () => {
+    const { loadSample } = await import('@/data/sample')
+    const { getState } = await import('@/data/store')
+    const { profitAndLoss, pnlRate, monthsIn } = await import('./pnl')
+    const { actualProfit } = await import('./transfers')
+    loadSample()
+    const d = getState()
+    const toInr = (n: number, c: string) => (c === 'INR' ? n : c === 'SAR' ? n * 26.9 : n * 27.5)
+    const rate = pnlRate(d)!
+    const p = profitAndLoss(d, toInr, undefined, undefined, rate)
+    expect(p.grossProfit).toBeCloseTo(p.sales - p.costOfSales, 2)
+    expect(p.netProfit).toBeCloseTo(p.grossProfit - p.deliveryCharges - p.totalExpenses, 2)
+    // same profit on deals as Reports (achieved rate)
+    const live = d.deals.filter((x) => x.status !== 'cancelled')
+    expect(p.grossProfit - p.deliveryCharges).toBeCloseTo(actualProfit(live, rate, 0)!.inr, 0)
+    const months = monthsIn(d).map((ym) => profitAndLoss(d, toInr, ym + '-01', ym + '-31', rate))
+    expect(months.reduce((t, m) => t + m.netProfit, 0)).toBeCloseTo(p.netProfit, 1)
+  })
+})

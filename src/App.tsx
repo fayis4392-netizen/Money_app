@@ -13,6 +13,7 @@ import Capital from '@/pages/Capital'
 import Balances from '@/pages/Balances'
 import Reports from '@/pages/Reports'
 import Statements from '@/pages/Statements'
+import ProfitLoss from '@/pages/ProfitLoss'
 import PartyLedger from '@/pages/PartyLedger'
 import { DealDialogProvider } from '@/components/deal/DealDialog'
 import { AuthGate } from '@/components/AuthGate'
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="expenses" element={<Expenses />} />
           <Route path="balances" element={<Balances />} />
           <Route path="statements" element={<Statements />} />
+          <Route path="profit-loss" element={<ProfitLoss />} />
           <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFound />} />
