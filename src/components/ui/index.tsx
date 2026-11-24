@@ -95,14 +95,15 @@ export function Dialog({ open, onClose, title, children, footer, wide }: { open:
         wide && 'w-[min(940px,calc(100vw-32px))]',
       )}
     >
-      <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+      <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3.5">
         <h2 className="text-base font-bold">{title}</h2>
         <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
           <X />
         </Button>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto px-5 py-4">{children}</div>
-      {footer && <div className="flex justify-end gap-2 border-t border-border px-5 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] max-md:[&>*]:flex-1">{footer}</div>}
+      {/* basis auto, not flex-1: iOS Safari collapses a 0-basis body when the dialog has no fixed height */}
+      <div className="min-h-0 flex-auto shrink overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
+      {footer && <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] max-md:[&>*]:flex-1">{footer}</div>}
     </dialog>
   )
 }
