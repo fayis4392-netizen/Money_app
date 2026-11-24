@@ -16,8 +16,11 @@ import Statements from '@/pages/Statements'
 import PartyLedger from '@/pages/PartyLedger'
 import { DealDialogProvider } from '@/components/deal/DealDialog'
 import { AuthGate } from '@/components/AuthGate'
+import Privacy from '@/pages/Privacy'
 
 export default function App() {
+  // public page (Google needs it for the Drive backup); everything else is behind sign-in
+  if (location.pathname === '/privacy') return <Privacy />
   return (
     <BrowserRouter>
       <AuthGate>
