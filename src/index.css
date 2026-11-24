@@ -15,6 +15,11 @@
   --neg: #c0362c;
   --danger: #c0362c;
   --warn: #b26a00;
+  /* charts: validated categorical slots (blue, orange, aqua) + recessive grid */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --grid: #ece9f2;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -32,6 +37,10 @@
     --neg: #ff7a6e;
     --danger: #ff7a6e;
     --warn: #f0b04c;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --grid: #2a2835;
     color-scheme: dark;
   }
 }
@@ -47,6 +56,10 @@
   --color-accent-fg: var(--accent-fg);
   --color-accent-soft: var(--accent-soft);
   --color-pos: var(--pos);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-series-3: var(--series-3);
+  --color-grid: var(--grid);
   --color-neg: var(--neg);
   --color-danger: var(--danger);
   --color-warn: var(--warn);
