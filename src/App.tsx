@@ -15,10 +15,12 @@ import Reports from '@/pages/Reports'
 import Statements from '@/pages/Statements'
 import PartyLedger from '@/pages/PartyLedger'
 import { DealDialogProvider } from '@/components/deal/DealDialog'
+import { AuthGate } from '@/components/AuthGate'
 
 export default function App() {
   return (
     <BrowserRouter>
+      <AuthGate>
       <DealDialogProvider>
       <Routes>
         <Route element={<AppShell />}>
@@ -39,6 +41,7 @@ export default function App() {
         </Route>
       </Routes>
       </DealDialogProvider>
+      </AuthGate>
       <Toaster position="top-center" richColors closeButton />
     </BrowserRouter>
   )

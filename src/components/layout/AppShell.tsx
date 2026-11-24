@@ -1,7 +1,8 @@
 import { Wallet, ChartColumn, FileUser, Ellipsis, Landmark, LayoutDashboard, Menu, Plus, ReceiptText, Scale, Settings, Truck, Users, type LucideIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { useAppState } from '@/data/store'
+import { hasUnsaved, useAppState, useSyncStatus, type SyncStatus } from '@/data/store'
+import { supabase } from '@/lib/supabase'
 import { rate } from '@/domain/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui'
@@ -79,9 +80,7 @@ export function AppShell() {
             {g.items.map(link)}
           </nav>
         ))}
-        <div className="mt-auto rounded-xl bg-surface-2 p-3 text-xs text-muted">
-          <b className="text-fg">Phase 3 build.</b> Data is saved in this browser until the Supabase project is connected.
-        </div>
+        <SyncBox />
       </aside>
 
       <div className="min-w-0">
@@ -119,6 +118,35 @@ export function AppShell() {
       </nav>
 
       <RatesDialog open={rates} onClose={() => setRates(false)} />
+    </div>
+  )
+}
+
+const SYNC_TEXT: Record<SyncStatus, [string, string]> = {
+  local: ['bg-amber-500', 'Saved in this browser only'],
+  saved: ['bg-emerald-500', 'All changes saved'],
+  saving: ['bg-sky-500 animate-pulse', 'Saving…'],
+  offline: ['bg-red-500', 'No connection: changes not saved yet'],
+  error: ['bg-red-500', "Couldn't save: retrying"],
+}
+
+/** Where the books are saved, who is signed in, and sign out. */
+function SyncBox() {
+  const status = useSyncStatus()
+  const [email, setEmail] = useState<string | undefined>()
+  useEffect(() => {
+    supabase?.auth.getSession().then(({ data }) => setEmail(data.session?.user.email))
+  }, [])
+  const [dot, text] = SYNC_TEXT[status]
+  return (
+    <div className="mt-auto grid gap-1.5 rounded-xl bg-surface-2 p-3 text-xs text-muted">
+      <div className="flex items-center gap-2 font-medium text-fg"><span className={cn('size-2 shrink-0 rounded-full', dot)} />{text}</div>
+      {email && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate" title={email}>{email}</span>
+          <button className="shrink-0 text-accent hover:underline" onClick={() => { if (!hasUnsaved() || confirm('Some changes are not saved yet. Sign out anyway?')) void supabase!.auth.signOut() }}>Sign out</button>
+        </div>
+      )}
     </div>
   )
 }

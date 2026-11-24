@@ -1,8 +1,9 @@
 import { Plus, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { saveDefaults, saveSlabs } from '@/data/actions'
-import { useAppState } from '@/data/store'
-import { fdt, lakh, money, rate } from '@/domain/format'
+import { getState, listRestorePoints, normalize, restorePoint, setState, useAppState, useSyncStatus, type AppData } from '@/data/store'
+import { fdt, lakh, money, rate, todayStr } from '@/domain/format'
 import { deliveryFee, inrPerSar, round4 } from '@/domain/pricing'
 import { attempt } from '@/lib/utils'
 import { Button, Card, CardHeader, Dialog, Field, Input, Stat } from '@/components/ui'
@@ -136,17 +137,86 @@ function DefaultsCard() {
 }
 
 export function DataCard() {
-  const [ask, setAsk] = useState<'sample' | 'clear' | null>(null)
+  const [ask, setAsk] = useState<'sample' | 'clear' | { file: AppData; name: string } | { point: number; at: string } | null>(null)
+  const [points, setPoints] = useState<{ id: number; version: number; saved_at: string }[] | null>(null)
   const counts = useAppState((x) => x.deals.length + ' deals · ' + x.parties.length + ' parties · ' + x.receipts.length + ' cash entries')
+  const online = useSyncStatus() !== 'local'
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  const backup = () => {
+    const blob = new Blob([JSON.stringify(getState(), null, 1)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `exchange-ledger-backup_${todayStr()}.json`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000)
+  }
+  const pickFile = async (f?: File) => {
+    if (!f) return
+    try {
+      const d = JSON.parse(await f.text())
+      if (!d || typeof d !== 'object' || !Array.isArray(d.parties) || !Array.isArray(d.deals)) throw new Error('not a backup')
+      setAsk({ file: normalize(d), name: f.name })
+    } catch {
+      toast.error("That file isn't an Exchange Ledger backup")
+    }
+    if (fileInput.current) fileInput.current.value = ''
+  }
+  const showPoints = () => listRestorePoints().then(setPoints, (e) => toast.error("Couldn't load restore points: " + (e as Error).message))
+
+  const who = online ? 'everyone' : 'this browser'
+  const title = ask === 'sample' ? 'Load sample data' : ask === 'clear' ? 'Clear all data' : ask && 'file' in ask ? 'Restore from backup file' : 'Go back to a restore point'
+  const message =
+    ask === 'sample' ? `This replaces every party, deal and cash entry with sample books, for ${who}. Rates and slabs stay.`
+    : ask === 'clear' ? `This removes every party, deal and cash entry, for ${who}. Rates and slabs stay.${online ? ' You can go back with a restore point.' : ' It cannot be undone.'}`
+    : ask && 'file' in ask ? `Replace the books${online ? ' for everyone' : ''} with ${ask.name} (${ask.file.parties.length} parties · ${ask.file.deals.length} deals · ${ask.file.receipts.length} cash entries)? Download a backup of the current books first if you might need them.`
+    : ask ? `Replace the books${online ? ' for everyone' : ''} with how they were on ${ask.at}? Everything entered after that will be gone (download a backup first if unsure).`
+    : ''
+  const run = async () => {
+    if (ask === 'sample' || ask === 'clear') return attempt(() => (ask === 'sample' ? loadSample() : clearAll()), ask === 'sample' ? 'Sample data loaded' : 'All data cleared')
+    if (ask && 'file' in ask) return attempt(() => setState(() => ask.file), 'Books restored from the file')
+    if (ask) {
+      try {
+        await restorePoint(ask.point)
+        toast.success('Books restored')
+        return true
+      } catch (e) {
+        toast.error("Couldn't restore: " + (e as Error).message)
+      }
+    }
+    return false
+  }
+
   return (
     <Card>
-      <CardHeader title="Data" sub={<>Stored in this browser until the Supabase project is connected. Now: {counts}.</>} />
+      <CardHeader title="Data" sub={<>{online ? 'Saved online and shared by everyone who signs in.' : 'Stored in this browser only.'} Now: {counts}.</>} />
       <div className="flex flex-wrap gap-2">
+        <Button variant="primary" onClick={backup}>Download backup</Button>
+        <Button onClick={() => fileInput.current?.click()}>Restore from backup file</Button>
+        <input ref={fileInput} type="file" accept="application/json,.json" className="hidden" onChange={(e) => pickFile(e.target.files?.[0])} />
+        {online && <Button onClick={showPoints}>Restore points</Button>}
         <Button onClick={() => setAsk('sample')}>Load sample data</Button>
         <Button variant="danger" onClick={() => setAsk('clear')}>Clear all data</Button>
       </div>
-      <Dialog open={!!ask} onClose={() => setAsk(null)} title={ask === 'sample' ? 'Load sample data' : 'Clear all data'} footer={<><Button onClick={() => setAsk(null)}>Cancel</Button><Button variant={ask === 'clear' ? 'danger' : 'primary'} onClick={() => { if (attempt(() => (ask === 'sample' ? loadSample() : clearAll()), ask === 'sample' ? 'Sample data loaded' : 'All data cleared')) setAsk(null) }}>{ask === 'sample' ? 'Replace with sample' : 'Clear everything'}</Button></>}>
-        <p className="text-sm text-muted">{ask === 'sample' ? "This replaces every party, deal and cash entry with sample books, including Rayees' real account. Rates and slabs stay." : 'This removes every party, deal and cash entry from this browser. Rates and slabs stay. It cannot be undone.'}</p>
+      <p className="mt-2 text-xs text-muted">Download a backup now and then and keep it somewhere safe (e.g. Google Drive).{online ? ' Supabase also keeps a restore point every hour while people work, for six months.' : ''}</p>
+      {points && (
+        <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-border">
+          {points.length ? (
+            <ul className="divide-y divide-border text-sm">
+              {points.map((p) => (
+                <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                  <span>{fdt(p.saved_at)} <span className="text-xs text-muted">· save #{p.version}</span></span>
+                  <Button size="sm" onClick={() => setAsk({ point: p.id, at: fdt(p.saved_at) })}>Restore</Button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="px-3 py-2 text-sm text-muted">No restore points yet. The first one is kept with the next save.</p>
+          )}
+        </div>
+      )}
+      <Dialog open={!!ask} onClose={() => setAsk(null)} title={title} footer={<><Button onClick={() => setAsk(null)}>Cancel</Button><Button variant={ask === 'sample' ? 'primary' : 'danger'} onClick={async () => { if (await run()) setAsk(null) }}>{ask === 'sample' ? 'Replace with sample' : ask === 'clear' ? 'Clear everything' : 'Restore'}</Button></>}>
+        <p className="text-sm text-muted">{message}</p>
       </Dialog>
     </Card>
   )

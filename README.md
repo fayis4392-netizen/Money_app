@@ -3,7 +3,7 @@
 Currency exchange transaction system for Sinan's SAR → AED → INR business.
 Customers in Saudi Arabia ask for rupees to be delivered in India; the operator collects SAR, sends it through Dubai, and Indian distributors pay the recipients.
 
-Built with React, Vite, TypeScript and Tailwind; Supabase (Postgres + logins) is the backend from phase 2.
+Built with React, Vite, TypeScript and Tailwind, with Supabase for sign-in and the shared books.
 The clickable prototype that this app follows lives in `~/Desktop/TradeApp/prototype.html` (hosted at https://shafila657-max.github.io/exchange-ledger/).
 
 ## Run it
@@ -14,6 +14,15 @@ npm run dev      # http://localhost:5173
 npm test         # pricing + ledger maths
 npm run build    # type-check and build to dist/
 ```
+
+## Supabase (sign-in and shared books)
+
+1. Supabase → **SQL Editor** → paste `supabase/migrations/0001_app_state.sql` → **Run**.
+2. **Authentication → Sign In / Providers → Email**: turn **off** "Allow new users to sign up" (internal tool: accounts are created by the owner only).
+3. **Authentication → Users → Add user → Create new user**: email + password, tick **Auto Confirm User**.
+4. Put the project URL and publishable key in `.env.local` (see `.env.example`) and in Vercel → Project → Settings → Environment Variables, then redeploy.
+
+The books are one shared document with a version number: a save is refused if someone else saved first, and the app then shows their latest books. Supabase keeps a restore point every hour (Settings → Data → Restore points). Without the env vars the app keeps its books in the browser.
 
 ## How pricing works
 
@@ -36,7 +45,7 @@ Ledgers follow the operator's books: Date · Particulars · Qty · Rate · Credi
 | `src/components/ui/` | Buttons, inputs, cards, dialog (shadcn-style). |
 | `src/components/layout/` | Sidebar, top bar, phone tab bar, rates dialog. |
 | `src/pages/` | One file per screen. |
-| `supabase/migrations/` | Database schema (draft until the Supabase project exists). |
+| `supabase/migrations/` | Database setup to run in Supabase. `supabase/drafts/` holds a fuller table-per-entry schema for later. |
 
 ## Status
 
