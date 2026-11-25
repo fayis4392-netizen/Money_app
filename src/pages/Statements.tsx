@@ -14,7 +14,9 @@ const n3 = (n: number) => (Math.abs(n) < 0.0005 ? 0 : n).toFixed(3)
 const c3 = (n: number) => (Math.abs(n) < 0.0005 ? 0 : n).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 /** Which way the balance runs: we receive (കിട്ടാനുള്ളത്) or we pay (കൊടുക്കാനുള്ളത്). */
 const sideOf = (b: number): Exclude<Show, 'all'> => (b > 0.0005 ? 'receive' : b < -0.0005 ? 'pay' : 'clear')
-const SIDE = { receive: 'To receive', pay: 'To pay', clear: 'Clear' } as const
+/** Standard statement wording: the balance carries Dr (the customer owes) or Cr (we owe the customer). */
+const drCr = (b: number) => (Math.abs(b) < 0.0005 ? '0.000' : `${c3(Math.abs(b))} ${b > 0 ? 'Dr' : 'Cr'}`)
+const drCr3 = (b: number) => (Math.abs(b) < 0.0005 ? '0.000' : `${n3(Math.abs(b))} ${b > 0 ? 'Dr' : 'Cr'}`)
 
 /** Saudi customers' SAR accounts at a glance: pick some and download a summary or their full ledgers. */
 export default function Statements() {
@@ -47,12 +49,12 @@ export default function Statements() {
   const period = f.from || f.to ? `${dmy(f.from) || 'start'} to ${dmy(f.to) || dmy(todayStr())}` : `as on ${dmy(f.to || todayStr())}`
   const stamp = `${f.from || 'start'}_to_${f.to || todayStr()}`
   const total = (l: typeof rows) => l.reduce((t, r) => ({ debit: t.debit + r.debit, credit: t.credit + r.credit, balance: t.balance + r.balance, deals: t.deals + r.deals }), { debit: 0, credit: 0, balance: 0, deals: 0 })
-  const HEAD = ['#', 'CUSTOMER', 'DEALS', '+ DEBIT (SAR)', '- CREDIT (SAR)', 'BALANCE (SAR)', '']
-  const tableRows = (l: typeof rows) => l.map((r, i) => [String(i + 1), r.p.name, String(r.deals), n3(r.debit), n3(r.credit), n3(Math.abs(r.balance)), SIDE[sideOf(r.balance)]])
-  const footRow = (l: typeof rows) => { const t = total(l); return ['', 'Total', String(t.deals), n3(t.debit), n3(t.credit), n3(Math.abs(t.balance)), SIDE[sideOf(t.balance)]] }
+  const HEAD = ['#', 'CUSTOMER', 'DEALS', 'DEBIT (SAR)', 'CREDIT (SAR)', 'BALANCE (SAR)']
+  const tableRows = (l: typeof rows) => l.map((r, i) => [String(i + 1), r.p.name, String(r.deals), n3(r.debit), n3(r.credit), drCr3(r.balance)])
+  const footRow = (l: typeof rows) => { const t = total(l); return ['', 'Total', String(t.deals), n3(t.debit), n3(t.credit), drCr3(t.balance)] }
 
   const need = () => (chosen.length ? true : (toast.error('Tick at least one customer'), false))
-  const summaryPdf = () => need() && exportTablePdf(`Customer balances  ·  ${period}`, `${chosen.length} customer${chosen.length > 1 ? 's' : ''}  ·  balance = debit - credit`, HEAD, tableRows(chosen), chosen.length > 1 ? footRow(chosen) : undefined, `customer_balances_${stamp}`, [2, 3, 4, 5]).catch((e) => toast.error('PDF failed: ' + (e as Error).message))
+  const summaryPdf = () => need() && exportTablePdf(`Customer balances  ·  ${period}`, `${chosen.length} customer${chosen.length > 1 ? 's' : ''}  ·  Dr = due from you  ·  Cr = due to you`, HEAD, tableRows(chosen), chosen.length > 1 ? footRow(chosen) : undefined, `customer_balances_${stamp}`, [2, 3, 4, 5]).catch((e) => toast.error('PDF failed: ' + (e as Error).message))
   const summaryCsv = () => need() && downloadCsv(`customer_balances_${stamp}`, [[`Customer balances · ${period}`], HEAD, ...tableRows(chosen), footRow(chosen)])
   const ledgersPdf = () => need() && exportLedgersPdf(chosen.map((r) => ({ title: `${r.p.name}  ·  SAR Ledger  ·  ${period}`, s: r.s })), chosen.length === 1 ? `${chosen[0].p.name.replace(/[^\w]+/g, '_')}_statement_${stamp}` : `customer_statements_${stamp}`).catch((e) => toast.error('PDF failed: ' + (e as Error).message))
 
@@ -66,9 +68,9 @@ export default function Statements() {
         <Field label="Show" className="flex-1 sm:max-w-44">
           <Select value={f.show} onChange={(e) => setF({ ...f, show: e.target.value as Show })}>
             <option value="all">All customers</option>
-            <option value="receive">To receive</option>
-            <option value="pay">To pay</option>
-            <option value="clear">Clear</option>
+            <option value="receive">Dr balance (owes us)</option>
+            <option value="pay">Cr balance (we owe)</option>
+            <option value="clear">Zero balance</option>
           </Select>
         </Field>
         <Field label="Search" className="min-w-48 flex-1">
@@ -78,9 +80,9 @@ export default function Statements() {
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         <Stat label="Customers" value={String(list.length)} sub={`${t.deals} deals`} />
-        <Stat label="+ Debit" value={money(t.debit, 'SAR')} />
-        <Stat label="− Credit" value={money(t.credit, 'SAR')} />
-        <Stat label={SIDE[sideOf(t.balance)]} value={<span className={t.balance > 0.0005 ? 'text-pos' : t.balance < -0.0005 ? 'text-neg' : ''}>{money(Math.abs(t.balance), 'SAR')}</span>} sub="balance = debit − credit" />
+        <Stat label="Debit" value={money(t.debit, 'SAR')} />
+        <Stat label="Credit" value={money(t.credit, 'SAR')} />
+        <Stat label="Balance" value={<span className={t.balance > 0.0005 ? 'text-pos' : t.balance < -0.0005 ? 'text-neg' : ''}>SAR {drCr(t.balance)}</span>} sub="Dr = owes us · Cr = we owe" />
       </div>
 
       <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm">
@@ -98,7 +100,7 @@ export default function Statements() {
                 <thead className="border-b border-border bg-surface-2 text-xs text-muted">
                   <tr>
                     <th className="w-10 px-3 py-2"><input type="checkbox" className="size-4 accent-accent" checked={allListed} onChange={toggleAll} aria-label="Select all" /></th>
-                    {['Customer', 'Deals', '+ Debit', '− Credit', 'Balance', ''].map((h, i) => <th key={h} className={cn('px-3 py-2 font-semibold whitespace-nowrap', i === 0 ? 'text-left' : 'text-right')}>{h}</th>)}
+                    {['Customer', 'Deals', 'Debit', 'Credit', 'Balance'].map((h, i) => <th key={h} className={cn('px-3 py-2 font-semibold whitespace-nowrap', i === 0 ? 'text-left' : 'text-right')}>{h}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -107,10 +109,9 @@ export default function Statements() {
                       <td className="px-3 py-2"><input type="checkbox" className="size-4 accent-accent" checked={picked.has(r.p.id)} onChange={() => toggle(r.p.id)} onClick={(e) => e.stopPropagation()} aria-label={'Select ' + r.p.name} /></td>
                       <td className="px-3 py-2"><Link className="font-semibold text-accent" to={'/parties/' + r.p.id} onClick={(e) => e.stopPropagation()}>{r.p.name}</Link></td>
                       <td className="px-3 py-2 text-right">{r.deals}</td>
-                      <td className="px-3 py-2 text-right whitespace-nowrap"><span className="text-pos">+</span> {c3(r.debit)}</td>
-                      <td className="px-3 py-2 text-right whitespace-nowrap"><span className="text-neg">−</span> {c3(r.credit)}</td>
-                      <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">{c3(Math.abs(r.balance))}</td>
-                      <td className={cn('px-3 py-2 text-right font-semibold whitespace-nowrap', sideOf(r.balance) === 'receive' ? 'text-pos' : sideOf(r.balance) === 'pay' ? 'text-neg' : 'text-muted')}>{SIDE[sideOf(r.balance)]}</td>
+                      <td className="px-3 py-2 text-right whitespace-nowrap">{c3(r.debit)}</td>
+                      <td className="px-3 py-2 text-right whitespace-nowrap">{c3(r.credit)}</td>
+                      <td className={cn('px-3 py-2 text-right font-semibold whitespace-nowrap', sideOf(r.balance) === 'receive' ? 'text-pos' : sideOf(r.balance) === 'pay' && 'text-neg')}>{drCr(r.balance)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -123,9 +124,9 @@ export default function Statements() {
                   <input type="checkbox" className="size-4 shrink-0 accent-accent" checked={picked.has(r.p.id)} onChange={() => toggle(r.p.id)} onClick={(e) => e.stopPropagation()} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-semibold">{r.p.name}</div>
-                    <div className="text-xs text-muted">{r.deals} deals · <span className="text-pos">+</span> {c3(r.debit)} · <span className="text-neg">−</span> {c3(r.credit)}</div>
+                    <div className="text-xs text-muted">{r.deals} deals · Dr {c3(r.debit)} · Cr {c3(r.credit)}</div>
                   </div>
-                  <div className="text-right"><b>{c3(Math.abs(r.balance))}</b><div className={cn('text-xs font-semibold', sideOf(r.balance) === 'receive' ? 'text-pos' : sideOf(r.balance) === 'pay' ? 'text-neg' : 'text-muted')}>{SIDE[sideOf(r.balance)]}</div></div>
+                  <b className={cn('text-right whitespace-nowrap', sideOf(r.balance) === 'receive' ? 'text-pos' : sideOf(r.balance) === 'pay' && 'text-neg')}>{drCr(r.balance)}</b>
                 </li>
               ))}
             </ul>
