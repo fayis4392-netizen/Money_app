@@ -11,6 +11,7 @@ import { Button, Card, Empty, Field, Input, Select, Stat } from '@/components/ui
 import { expenseTotals } from '@/domain/expenses'
 import { inrPerSar } from '@/domain/pricing'
 import { useToInr } from '@/lib/useToInr'
+import { DISTRIBUTOR_CHARGE } from '@/domain/types'
 
 const GROUPS = { customer: 'Customer', distributor: 'Distributor', region: 'Region', month: 'Month', day: 'Day' } as const
 type Group = keyof typeof GROUPS
@@ -75,11 +76,13 @@ export default function Reports() {
       {(() => {
         const exp = expenseTotals(data.expenses, toInr, f.from || undefined, f.to || undefined)
         const net = tot.netInr - exp.inr
+        // the distributors' daily charge entries count as delivery charges, not other expenses
+        const daily = exp.byCategory.get(DISTRIBUTOR_CHARGE) ?? 0
         return (
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
             <Stat label="Gross profit" value={money(tot.netInr + tot.fees, 'INR')} sub={`${tot.n} deals · ${rateNow ? 'at achieved rate' : 'at deal rates'}`} />
-            <Stat label="Delivery charge" value={<span className="text-neg">− {money(tot.fees, 'INR')}</span>} sub="paid to distributors" />
-            <Stat label="Other expenses" value={<span className="text-neg">− {money(exp.inr, 'INR')}</span>} sub={`${exp.list.length} in this period`} />
+            <Stat label="Delivery charge" value={<span className="text-neg">− {money(tot.fees + daily, 'INR')}</span>} sub="paid to distributors" />
+            <Stat label="Other expenses" value={<span className="text-neg">− {money(exp.inr - daily, 'INR')}</span>} sub={`${exp.list.filter((e) => e.category !== DISTRIBUTOR_CHARGE).length} in this period`} />
             <Stat label="Net profit" value={<span className={net >= 0 ? 'text-pos' : 'text-neg'}>{money(net, 'INR')}</span>} sub="after all costs" />
           </div>
         )

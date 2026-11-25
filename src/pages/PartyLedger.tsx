@@ -2,7 +2,7 @@ import { ArrowLeftRight, FileDown, MessageCircle, FileSpreadsheet, HandCoins, Ha
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { addReceipt, editReceipt, setNarration, voidExpense } from '@/data/actions'
+import { addReceipt, cancelDeal, editReceipt, setNarration, voidExpense } from '@/data/actions'
 import { VoidDialog } from '@/components/VoidDialog'
 import { TransferDialog } from '@/components/transfer/TransferDialog'
 import { CapitalDialog } from '@/pages/Capital'
@@ -10,7 +10,7 @@ import { ExpenseDialog } from '@/components/expense/ExpenseDialog'
 import { useData } from '@/data/store'
 import { canCorrect, deriveLines, partyStatement, type PartyLine } from '@/domain/derive'
 import { dmy, drcr, f3, fdt, todayStr } from '@/domain/format'
-import { OPENING_CURRENCY, PARTY_TYPE_LABEL, type Currency, type Expense, type Party, type Receipt, type Transfer, type TransferKind } from '@/domain/types'
+import { DISTRIBUTOR_CHARGE, OPENING_CURRENCY, PARTY_TYPE_LABEL, type Currency, type Deal, type Expense, type Party, type Receipt, type Transfer, type TransferKind } from '@/domain/types'
 import { exportLedgerCsv, exportLedgerPdf, fileName, ledgerPdfFile, type LedgerStyle } from '@/lib/export'
 import { WhatsAppDialog, type WhatsAppShare } from '@/components/WhatsAppDialog'
 import { attempt, cn } from '@/lib/utils'
@@ -29,13 +29,14 @@ export default function PartyLedger() {
   const [receipt, setReceipt] = useState<{ edit?: Receipt } | null>(null)
   const [voiding, setVoiding] = useState<Receipt | null>(null)
   const [reword, setReword] = useState<Row | null>(null)
-  const [expense, setExpense] = useState<{ edit?: Expense } | null>(null)
+  const [expense, setExpense] = useState<{ edit?: Expense; category?: string } | null>(null)
   // shortcuts open the normal two-sided forms with this person filled in
   const [transfer, setTransfer] = useState<{ kind: TransferKind; edit?: Transfer; preset?: { fromId?: string; toId?: string } } | null>(null)
   const [voidingTr, setVoidingTr] = useState<Transfer | null>(null)
   const [capital, setCapital] = useState(false)
   const [voidingExp, setVoidingExp] = useState<Expense | null>(null)
   const [whatsapp, setWhatsapp] = useState<WhatsAppShare | null>(null)
+  const [cancellingDeal, setCancellingDeal] = useState<Deal | null>(null)
   const { correctDeal, newDeal } = useDealDialog()
   // the Dubai agent's AED account shows ₹ and SAR beside each line instead of qty and rate
   const styleFor = (cur: Currency): LedgerStyle => (p?.type === 'dubai_agent' && cur === 'AED' ? 'agent' : 'books')
@@ -86,6 +87,7 @@ export default function PartyLedger() {
       <>
         <Button size="sm" onClick={() => setReword(r)} title="Reword the particulars">Edit</Button>
         {deal && deal.customerId === p.id && canCorrect(deal) && <Button size="sm" onClick={() => correctDeal(deal)} title="Correct qty or rate">Correct</Button>}
+        {deal && deal.customerId === p.id && canCorrect(deal) && <Button size="sm" variant="danger" onClick={() => setCancellingDeal(deal)} title="The delivery failed or the deal is off">Cancel</Button>}
       </>
     )
   }
@@ -132,6 +134,7 @@ export default function PartyLedger() {
           )}
           {p.type === 'distributor' && <Button variant="primary" onClick={() => setTransfer({ kind: 'payout', preset: { toId: p.id } })}><HandCoins /> Received from Dubai agent</Button>}
           {p.type === 'operator' && <Button variant="primary" onClick={() => setCapital(true)}><Landmark /> Capital entry</Button>}
+          {p.type === 'distributor' && <Button onClick={() => setExpense({ category: DISTRIBUTOR_CHARGE })}><Plus /> Day's charge</Button>}
           {p.type !== 'saudi_customer' && <Button onClick={() => setExpense({})}><Plus /> Expense</Button>}
         </div>
       </div>
@@ -172,10 +175,19 @@ export default function PartyLedger() {
       })}
 
       <WhatsAppDialog share={whatsapp} onClose={() => setWhatsapp(null)} />
+      <ReasonDialog
+        open={!!cancellingDeal}
+        title={`Cancel ${cancellingDeal?.dealNo ?? ''} · ${cancellingDeal?.recipientName ?? ''}`}
+        message={cancellingDeal ? `Reverses SAR ${cancellingDeal.sarAmount.toLocaleString('en-IN', { minimumFractionDigits: 3 })} on this ledger${cancellingDeal.status === 'completed' && cancellingDeal.distributorId ? ` and the ₹${cancellingDeal.inrPayout.toLocaleString('en-IN')} payment on the distributor's ledger` : ''}. The deal stays in the list, marked cancelled.` : ''}
+        confirm="Cancel deal"
+        danger
+        onClose={() => setCancellingDeal(null)}
+        onConfirm={(r) => attempt(() => cancelDeal(cancellingDeal!.id, r), `${cancellingDeal!.dealNo} cancelled · reversal posted`)}
+      />
       <TransferDialog open={!!transfer} kind={transfer?.kind ?? 'send'} edit={transfer?.edit} preset={transfer?.preset} onClose={() => setTransfer(null)} />
       <VoidDialog target={voidingTr && { kind: 'transfer', id: voidingTr.id }} no={voidingTr?.no} onClose={() => setVoidingTr(null)} />
       <CapitalDialog open={capital} partyId={p.id} onClose={() => setCapital(false)} />
-      <ExpenseDialog open={!!expense} edit={expense?.edit} paidById={p.id} onClose={() => setExpense(null)} />
+      <ExpenseDialog open={!!expense} edit={expense?.edit} paidById={p.id} category={expense?.category} onClose={() => setExpense(null)} />
       <ReasonDialog open={!!voidingExp} title={`Void ${voidingExp?.no ?? ''}`} message="The expense stays on the ledger, struck out, with a reversing line." confirm="Void expense" danger onClose={() => setVoidingExp(null)} onConfirm={(r) => attempt(() => voidExpense(voidingExp!.id, r), 'Expense voided')} />
       <PartyDialog open={editParty} type={p.type} party={p} onClose={() => setEditParty(false)} />
       <ReceiptDialog open={!!receipt} customer={p} edit={receipt?.edit} onClose={() => setReceipt(null)} />

@@ -165,7 +165,8 @@ const dealSchema = z.object({
   recipientAddress: z.string().trim().default(''),
   regionId: z.string().min(1, 'Choose a delivery region'),
   distributorId: z.string().min(1, 'Choose a distributor'),
-  fee: z.coerce.number().min(0, 'Delivery charge must be 0 or more'),
+  // per-deal delivery charge: 0 for new deals (the distributor's charge is entered once a day as an expense)
+  fee: z.coerce.number().min(0, 'Delivery charge must be 0 or more').default(0),
   replacesDealId: z.string().optional(),
 })
 
@@ -203,10 +204,12 @@ function buildDeal(input: unknown, at: string): Deal {
     regionId: v.regionId,
     distributorId: dist!.id,
     distributorFeeInr: Math.round(v.fee * 100) / 100,
-    status: 'assigned',
+    // recorded as paid as soon as it's assigned; if the delivery fails it's cancelled later
+    status: 'completed',
     history: [
       { status: 'pending_allocation', at, note: `Logged @ SAR ${rate} per ₹1,000 (Dubai ${v.dubaiQuote} AED + premium ${round4(rate - v.dubaiQuote)})` },
-      { status: 'assigned', at, note: `Assigned to ${dist!.name} · fee ₹${v.fee}` },
+      { status: 'assigned', at, note: `Assigned to ${dist!.name}${v.fee ? ` · fee ₹${v.fee}` : ''}` },
+      { status: 'completed', at: v.dealDate + at.slice(10), note: `Paid ₹${inr.toLocaleString('en-IN')} to ${v.recipientName} (recorded on assignment)` },
     ],
     replacesDealId: v.replacesDealId || undefined,
     createdAt: at,
@@ -228,7 +231,7 @@ function cancelled(x: Deal, reason: string, at: string): Deal {
 export function cancelDeal(id: string, reason: string) {
   const x = getState().deals.find((d) => d.id === id) ?? fail('Deal not found')
   if (!reason.trim()) fail('Give a reason')
-  if (!canCorrect(x)) fail('Only deals not yet out for delivery can be cancelled')
+  if (!canCorrect(x)) fail('This deal is already cancelled')
   setState((s) => ({ ...s, deals: s.deals.map((d) => (d.id === id ? cancelled(x, reason.trim(), now()) : d)) }))
 }
 
@@ -248,7 +251,7 @@ export function reverseAndReenter(id: string, input: unknown): Deal {
 
 export function reassignDistributor(id: string, distributorId: string, fee: unknown) {
   const x = getState().deals.find((d) => d.id === id) ?? fail('Deal not found')
-  if (x.status !== 'assigned') fail('Only an assigned deal can be moved to another distributor')
+  if (x.status === 'cancelled') fail('A cancelled deal cannot be moved')
   const dist = party(distributorId)
   if (!dist || dist.type !== 'distributor') fail('Choose a distributor')
   const f = Number(fee)
@@ -266,6 +269,15 @@ export function undoDealStep(id: string, reason: string) {
   const what = x.status === 'completed' ? 'Delivery undone' : 'Out for delivery undone'
   const next = { ...x, status: back!, history: [...x.history, { status: back!, at: now(), note: `${what}: ${reason.trim()}` }] }
   setState((s) => ({ ...s, deals: s.deals.map((d) => (d.id === id ? next : d)) }))
+}
+
+/** Older deals still waiting: mark them all paid at once. */
+export function markAllPaid(ids: string[]) {
+  const at = now()
+  const open = new Set(getState().deals.filter((d) => ids.includes(d.id) && (d.status === 'assigned' || d.status === 'out_for_delivery' || d.status === 'pending_allocation')).map((d) => d.id))
+  if (!open.size) fail('Nothing waiting to mark as paid')
+  setState((s) => ({ ...s, deals: s.deals.map((d) => (open.has(d.id) ? { ...d, status: 'completed' as DealStatus, history: [...d.history, { status: 'completed' as DealStatus, at, note: `Paid ₹${d.inrPayout.toLocaleString('en-IN')} to ${d.recipientName} (marked with others)` }] } : d)) }))
+  return open.size
 }
 
 export function advanceDeal(id: string) {

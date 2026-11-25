@@ -10,13 +10,14 @@ import { downloadCsv } from '@/lib/export'
 import { useToInr } from '@/lib/useToInr'
 import { attempt, cn } from '@/lib/utils'
 import { Badge, Button, Card, CardHeader, Empty, Field, Input, ReasonDialog, Select, Stat } from '@/components/ui'
+import { DISTRIBUTOR_CHARGE } from '@/domain/types'
 import { ExpenseDialog } from '@/components/expense/ExpenseDialog'
 
 export default function Expenses() {
   const data = useData()
   const toInr = useToInr()
   const [f, setF] = useState(() => ({ from: todayStr().slice(0, 8) + '01', to: '', category: '', paidBy: '' }))
-  const [dialog, setDialog] = useState<{ edit?: Expense } | null>(null)
+  const [dialog, setDialog] = useState<{ edit?: Expense; category?: string } | null>(null)
   const [voiding, setVoiding] = useState<Expense | null>(null)
   const name = (id: string) => data.parties.find((p) => p.id === id)?.name ?? '—'
   const totals = expenseTotals(data.expenses, toInr, f.from || undefined, f.to || undefined)
@@ -35,6 +36,7 @@ export default function Expenses() {
         <Field label="Category" className="flex-1 sm:max-w-44"><Select value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}><option value="">All</option>{categories.map((c) => <option key={c}>{c}</option>)}</Select></Field>
         <Field label="Paid by" className="flex-1 sm:max-w-48"><Select value={f.paidBy} onChange={(e) => setF({ ...f, paidBy: e.target.value })}><option value="">Everyone</option>{payers.map((id) => <option key={id} value={id}>{name(id)}</option>)}</Select></Field>
         <span className="flex-1 max-sm:hidden" />
+        <Button className="max-sm:col-span-2" onClick={() => setDialog({ category: DISTRIBUTOR_CHARGE })}><Plus /> Distributor charge</Button>
         <Button variant="primary" className="max-sm:col-span-2" onClick={() => setDialog({})}><Plus /> Expense</Button>
       </div>
 
@@ -69,7 +71,7 @@ export default function Expenses() {
         )}
       </Card>
 
-      <ExpenseDialog open={!!dialog} edit={dialog?.edit} onClose={() => setDialog(null)} />
+      <ExpenseDialog open={!!dialog} edit={dialog?.edit} category={dialog?.category} onClose={() => setDialog(null)} />
       <ReasonDialog open={!!voiding} title={`Void ${voiding?.no ?? ''}`} message="The expense stays in the list, struck out, and the payer's ledger is put back." confirm="Void expense" danger onClose={() => setVoiding(null)} onConfirm={(r) => attempt(() => voidExpense(voiding!.id, r), 'Expense voided')} />
     </div>
   )

@@ -58,11 +58,18 @@ export function deriveLines(d: AppData): PartyLine[] {
       const at = x.history.at(-1)!.at
       add({ partyId: x.customerId, currency: 'SAR', date: at, particulars: 'Reversal: ' + (x.cancelReason ?? ''), amount: -x.sarAmount, qty: -qty, rate: x.customerRate, ref, sub: x.dealNo + ' cancelled', reversal: true })
     }
-    if (x.status === 'completed' && x.distributorId) {
-      // the distributor paid the recipient out of cash they hold for the operator
+    // the distributor paid the recipient out of cash they hold for the operator;
+    // a paid deal cancelled later keeps those lines and gets reversing ones on the cancel date
+    const paidThenCancelled = x.status === 'cancelled' && x.history.at(-2)?.status === 'completed'
+    if ((x.status === 'completed' || paidThenCancelled) && x.distributorId) {
       const at = x.history.findLast((h) => h.status === 'completed')!.at
       add({ partyId: x.distributorId, currency: 'INR', date: at, particulars: 'Paid to recipient ' + x.recipientName, amount: -x.inrPayout, ref, sub: x.dealNo })
       add({ partyId: x.distributorId, currency: 'INR', date: at, particulars: 'Delivery charge', amount: -x.distributorFeeInr, ref, sub: x.dealNo })
+      if (paidThenCancelled) {
+        const off = x.history.at(-1)!.at
+        add({ partyId: x.distributorId, currency: 'INR', date: off, particulars: `Reversal: ${x.recipientName} (${x.cancelReason ?? 'cancelled'})`, amount: x.inrPayout, ref, sub: x.dealNo + ' cancelled', reversal: true })
+        add({ partyId: x.distributorId, currency: 'INR', date: off, particulars: 'Reversal: delivery charge', amount: x.distributorFeeInr, ref, sub: x.dealNo + ' cancelled', reversal: true })
+      }
     }
   }
 
@@ -164,6 +171,7 @@ export function dealProfit(x: Deal, defaultFee: number) {
 export const dealProfitSar = (x: Deal, defaultFee: number) => dealProfit(x, defaultFee).sar
 
 /** Only a deal not yet out for delivery can be corrected or cancelled. */
-export const canCorrect = (x: Deal) => x.status === 'pending_allocation' || x.status === 'assigned'
+/** Any deal that isn't already cancelled can be corrected or cancelled (paid ones get reversing lines). */
+export const canCorrect = (x: Deal) => x.status !== 'cancelled'
 
 

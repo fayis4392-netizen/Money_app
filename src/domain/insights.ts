@@ -2,7 +2,7 @@ import type { AppData } from '@/data/store'
 import { balances } from './derive'
 import { inrPerSar } from './pricing'
 import { achievedRates } from './transfers'
-import type { Currency, Deal, PartyType } from './types'
+import { DISTRIBUTOR_CHARGE, type Currency, type Deal, type PartyType } from './types'
 
 export type Span = '30d' | '90d' | '12m' | 'all'
 export const SPAN_LABEL: Record<Span, string> = { '30d': 'Last 30 days', '90d': 'Last 3 months', '12m': 'Last 12 months', all: 'All time' }
@@ -75,6 +75,13 @@ export function insights(d: AppData, span: Span, today: string, toInr: (n: numbe
     b.deals++
     b.profit += dealNet(x, rate)
   }
+  // the distributors' daily charge is entered as one expense a day: take it off that day's profit
+  const charges = (from?: string, to?: string) => d.expenses.filter((e) => !e.voided && e.category === DISTRIBUTOR_CHARGE && (!from || e.date >= from) && (!to || e.date <= to))
+  for (const e of charges(r.from, r.to)) {
+    const b = byBucket.get(key(e.date))
+    if (b) b.profit -= toInr(e.amount, e.currency)
+  }
+  const less = (t: Totals, from?: string, to?: string) => ({ ...t, profit: t.profit - charges(from, to).reduce((s, e) => s + toInr(e.amount, e.currency), 0) })
 
   const name = (id?: string) => d.parties.find((p) => p.id === id)?.name ?? '—'
   const per = <K extends string | undefined>(pick: (x: Deal) => K) => {
@@ -114,8 +121,8 @@ export function insights(d: AppData, span: Span, today: string, toInr: (n: numbe
   return {
     range: r,
     rate,
-    now: totals(now, rate),
-    prev: r.prevFrom ? totals(prev, rate) : undefined,
+    now: less(totals(now, rate), r.from, r.to),
+    prev: r.prevFrom ? less(totals(prev, rate), r.prevFrom, r.prevTo) : undefined,
     buckets: [...byBucket.values()],
     customers: per((x) => x.customerId).sort((a, b) => b.profit - a.profit),
     status: {

@@ -2,7 +2,7 @@ import type { AppData } from '@/data/store'
 import { expenseTotals } from './expenses'
 import { inrPerSar, round2 } from './pricing'
 import { achievedRates } from './transfers'
-import type { Currency } from './types'
+import { DISTRIBUTOR_CHARGE, type Currency } from './types'
 
 export interface PnL {
   deals: number
@@ -43,7 +43,10 @@ export function profitAndLoss(d: AppData, toInr: (amount: number, c: Currency) =
     fees += x.distributorId ? x.distributorFeeInr : 0
   }
   const ex = expenseTotals(d.expenses, toInr, from, to)
-  const expenses = [...ex.byCategory].map(([category, inr]) => ({ category, inr })).sort((a, b) => b.inr - a.inr)
+  // the distributors' daily charge entries are delivery charges, alongside any older per-deal charges
+  const daily = ex.byCategory.get(DISTRIBUTOR_CHARGE) ?? 0
+  fees += daily
+  const expenses = [...ex.byCategory].filter(([c]) => c !== DISTRIBUTOR_CHARGE).map(([category, inr]) => ({ category, inr })).sort((a, b) => b.inr - a.inr)
   const grossProfit = round2(sales - cost)
   return {
     deals: deals.length,
@@ -53,8 +56,8 @@ export function profitAndLoss(d: AppData, toInr: (amount: number, c: Currency) =
     grossProfit,
     deliveryCharges: round2(fees),
     expenses,
-    totalExpenses: ex.inr,
-    netProfit: round2(grossProfit - fees - ex.inr),
+    totalExpenses: round2(ex.inr - daily),
+    netProfit: round2(grossProfit - fees - (ex.inr - daily)),
   }
 }
 

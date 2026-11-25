@@ -75,7 +75,7 @@ function PartyForm({ type, party, onDone }: { type: PartyType; party?: Party; on
         </>
       )}
       {type === 'distributor' && (
-        <Field className="col-span-2" label="Delivery charge (₹ per ₹1,00,000)" hint={`Leave empty to use the default of ₹${defaultFee} per lakh from Settings.`}>
+        <Field className="col-span-2" label="Delivery charge (₹ per ₹1,00,000)" hint={`Suggests this distributor's daily charge. Leave empty to use ₹${defaultFee} per lakh from Settings.`}>
           <Input type="number" step="any" min={0} inputMode="decimal" value={f.feePerLakh} onChange={set('feePerLakh')} placeholder={String(defaultFee)} />
         </Field>
       )}

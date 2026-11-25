@@ -120,7 +120,7 @@ function DefaultsCard() {
           attempt(() => saveDefaults(f), 'Defaults saved')
         }}
       >
-        <Field label="Distributor delivery charge (₹ per ₹1,00,000)" hint={Number(f.distributorFeePerLakh) >= 0 ? `e.g. ₹25,000 → ₹${deliveryFee(25_000, Number(f.distributorFeePerLakh) || 0)} · ₹1 lakh → ₹${deliveryFee(100_000, Number(f.distributorFeePerLakh) || 0)}. A distributor can have their own rate (Parties → Edit).` : undefined}>
+        <Field label="Distributor charge (₹ per ₹1,00,000)" hint={Number(f.distributorFeePerLakh) >= 0 ? `e.g. ₹25,000 → ₹${deliveryFee(25_000, Number(f.distributorFeePerLakh) || 0)} · ₹1 lakh → ₹${deliveryFee(100_000, Number(f.distributorFeePerLakh) || 0)}. Used to suggest each day's distributor charge (Expenses → Distributor charge). A distributor can have their own rate (Parties → Edit).` : undefined}>
           <Input type="number" step="any" min={0} inputMode="decimal" value={f.distributorFeePerLakh} onChange={(e) => setF({ ...f, distributorFeePerLakh: e.target.value })} />
         </Field>
         <Field label="Particulars for a sale">

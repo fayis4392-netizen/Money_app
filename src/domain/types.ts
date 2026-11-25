@@ -245,7 +245,9 @@ export interface CapitalEntry {
 }
 
 /* ---------------- expenses ---------------- */
-export const DEFAULT_EXPENSE_CATEGORIES = ['Transport', 'Commission', 'Bank / exchange charge', 'Phone', 'Salary', 'Other']
+/** The day's charge / commission a distributor takes, entered once a day (not per deal). Counted as delivery charges in profit. */
+export const DISTRIBUTOR_CHARGE = 'Distributor charge'
+export const DEFAULT_EXPENSE_CATEGORIES = [DISTRIBUTOR_CHARGE, 'Transport', 'Commission', 'Bank / exchange charge', 'Phone', 'Salary', 'Other']
 
 /** Money spent by someone holding the operator's cash (or paid from their own pocket, to be repaid). */
 export interface Expense {

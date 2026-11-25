@@ -6,6 +6,7 @@ import { booksCheck } from '@/domain/books'
 import { balances, partyStatement } from '@/domain/derive'
 import { achievedRates, actualProfit } from '@/domain/transfers'
 import { expenseTotals } from '@/domain/expenses'
+import { DISTRIBUTOR_CHARGE } from '@/domain/types'
 
 const rayees = () => getState().parties.find((p) => p.name === 'Rayees')!
 
@@ -50,7 +51,7 @@ describe('sample books', () => {
   })
 
   it('correcting a deal reverses the original and books the new one', () => {
-    const d = getState().deals.find((x) => x.status === 'assigned')!
+    const d = getState().deals.find((x) => x.status === 'completed')!
     const fixed = reverseAndReenter(d.id, { ...d, inrK: 20, customerRate: d.customerRate, fee: d.distributorFeeInr })
     expect(getState().deals.find((x) => x.id === d.id)!.status).toBe('cancelled')
     expect(fixed.replacesDealId).toBe(d.id)
@@ -59,9 +60,18 @@ describe('sample books', () => {
     expect(getState().deals.filter((x) => x.customerId === cust && x.status !== 'cancelled').some((x) => x.id === fixed.id)).toBe(true)
   })
 
-  it('a delivered deal cannot be cancelled', () => {
-    const done = getState().deals.find((x) => x.status === 'completed')!
-    expect(() => cancelDeal(done.id, 'x')).toThrow('Only deals not yet out for delivery can be cancelled')
+  it('a new deal is paid at once; cancelling it later reverses both the customer and the distributor', () => {
+    const d = getState().deals.find((x) => x.status === 'completed')!
+    const s0 = getState()
+    const cust0 = balances(s0)[d.customerId].SAR, dist0 = balances(s0)[d.distributorId!].INR
+    expect(() => cancelDeal(d.id, '')).toThrow(UserError)
+    cancelDeal(d.id, 'recipient not reachable')
+    const s1 = getState()
+    expect(balances(s1)[d.customerId].SAR).toBeCloseTo(cust0 - d.sarAmount, 3)
+    expect(balances(s1)[d.distributorId!].INR).toBeCloseTo(dist0 + d.inrPayout + d.distributorFeeInr, 2)
+    const lines = partyStatement(s1, d.distributorId!, 'INR').rows.filter((r) => r.ref.id === d.id)
+    expect(lines.some((r) => r.reversal && /recipient not reachable/.test(r.particulars))).toBe(true)
+    expect(() => cancelDeal(d.id, 'again')).toThrow(/already cancelled/)
   })
 
   it('transfers move money between holders and the chain balances', () => {
@@ -174,7 +184,9 @@ describe('sample books', () => {
   it('expenses add up in ₹ by category', () => {
     const t = expenseTotals(getState().expenses, (a, c) => (c === 'INR' ? a : c === 'SAR' ? a * 26.9 : a * 27.4))
     expect(t.byCategory.get('Transport')).toBe(Math.round(90 * 26.9 * 100) / 100)
-    expect(t.inr).toBe(Math.round((90 * 26.9 + 25 * 27.4 + 1500) * 100) / 100)
+    const daily = getState().expenses.filter((e) => e.category === DISTRIBUTOR_CHARGE).reduce((a, e) => a + e.amount, 0)
+    expect(daily).toBeGreaterThan(0)
+    expect(t.inr).toBeCloseTo(90 * 26.9 + 25 * 27.4 + 1500 + daily, 1)
   })
 
   it('books check: owed − owe − capital − openings agrees with the deal method', () => {

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { addDeal, reverseAndReenter } from '@/data/actions'
 import { useData } from '@/data/store'
 import { lakh, money, rate, todayStr } from '@/domain/format'
-import { deliveryFee, priceDeal, slabFor, suggestCustomerRate } from '@/domain/pricing'
+import { priceDeal, slabFor, suggestCustomerRate } from '@/domain/pricing'
 import type { Deal } from '@/domain/types'
 import { attempt, cn } from '@/lib/utils'
 import { Button, Dialog, Field, Input, Select } from '@/components/ui'
@@ -69,16 +69,12 @@ function DealForm({ original, customerId, onDone }: { original?: Deal; customerI
     fee: original ? String(original.distributorFeeInr) : '',
   }))
   const [auto, setAuto] = useState(!original)
-  // the delivery fee follows the amount and the distributor's rate until it is typed over
-  const [feeAuto, setFeeAuto] = useState(!original)
 
   const inr = Number(f.inrK) * 1000
   const q = Number(f.dubaiQuote)
   const c = Number(f.sarPerAed)
-  const dist = data.parties.find((p) => p.id === f.distributorId)
-  const perLakh = dist?.feePerLakh ?? st.distributorFeePerLakh
-  const autoFee = inr > 0 ? deliveryFee(inr, perLakh) : 0
-  const fee = feeAuto ? autoFee : Number(f.fee) || 0
+  // the distributor's charge is entered once a day as an expense, not on each deal (older deals keep theirs)
+  const fee = Number(f.fee) || 0
   const slab = inr > 0 ? slabFor(inr, st.slabs) : undefined
   const suggested = inr > 0 && q > 0 ? suggestCustomerRate(inr, q, st.slabs) : NaN
   const custRate = auto && suggested > 0 ? suggested : Number(f.customerRate)
@@ -102,7 +98,7 @@ function DealForm({ original, customerId, onDone }: { original?: Deal; customerI
         let saved: Deal | undefined
         const ok = attempt(() => {
           saved = original ? reverseAndReenter(original.id, input) : addDeal(input)
-        }, original ? `${original.dealNo} reversed · corrected deal saved` : 'Deal saved · distributor assigned')
+        }, original ? `${original.dealNo} reversed · corrected deal saved` : 'Deal saved · paid by the distributor')
         if (ok && saved) {
           onDone()
           nav('/deals/' + saved.id)
@@ -148,12 +144,6 @@ function DealForm({ original, customerId, onDone }: { original?: Deal; customerI
               {dists.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </Select>
           </Field>
-          <Field label={<>Delivery charge (₹) <span className={cn('font-medium', !feeAuto && fee !== autoFee && 'text-warn')}>· {feeAuto ? `₹${perLakh} per lakh` : fee !== autoFee ? 'manual' : `₹${perLakh} per lakh`}</span></>}>
-            <div className="flex gap-2">
-              <Input type="number" step="any" min={0} inputMode="decimal" value={feeAuto ? (inr > 0 ? String(autoFee) : '') : f.fee} onChange={(e) => { setFeeAuto(false); setF({ ...f, fee: e.target.value }) }} required />
-              <Button onClick={() => setFeeAuto(true)} title={`₹${perLakh} per ₹1,00,000`}><RotateCcw /></Button>
-            </div>
-          </Field>
           <Field label="Delivery address"><Input value={f.recipientAddress} onChange={set('recipientAddress')} placeholder="optional" /></Field>
         </Section>
       </div>
@@ -168,8 +158,8 @@ function DealForm({ original, customerId, onDone }: { original?: Deal; customerI
               <dt className="text-muted">Deliver in India</dt><dd className="text-right font-semibold tabular-nums">{money(inr, 'INR')}</dd>
               <dt className="text-muted">SAR to collect ({Number(f.inrK)} × {rate(custRate)})</dt><dd className="text-right font-semibold tabular-nums">{money(p.sar, 'SAR')}</dd>
               <dt className="text-muted">Dubai cost ({Number(f.inrK)} × {rate(q)} AED)</dt><dd className="text-right tabular-nums">{money(p.aedCost, 'AED')}</dd>
-              <dt className="text-muted">…in SAR (÷ {rate(c)})</dt><dd className="text-right tabular-nums">{money(p.sarCost, 'SAR')}</dd>
-              <dt className="text-muted">Distributor fee {money(fee, 'INR')}</dt><dd className="text-right tabular-nums">{money(p.feeSar, 'SAR')}</dd>
+              <dt className="text-muted">…in SAR (× {rate(c)})</dt><dd className="text-right tabular-nums">{money(p.sarCost, 'SAR')}</dd>
+              {fee > 0 && <><dt className="text-muted">Delivery charge {money(fee, 'INR')}</dt><dd className="text-right tabular-nums">{money(p.feeSar, 'SAR')}</dd></>}
               <dt className="text-muted">Profit per ₹1,000</dt><dd className="text-right tabular-nums">{money(p.profitPerThousand, 'SAR')}</dd>
               <dt className="font-semibold">Est. profit</dt>
               <dd className={cn('text-right font-bold tabular-nums', p.profitSar >= 0 ? 'text-pos' : 'text-neg')}>{money(p.profitSar, 'SAR')}<div className="text-xs font-normal text-muted">≈ {money(p.profitInr, 'INR')}</div></dd>

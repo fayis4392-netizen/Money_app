@@ -1,6 +1,7 @@
-import { addDeal, addExpense, addReceipt, addRegion, addTransfer, advanceDeal, capitalEntry, saveParty, setRates } from './actions'
+import { addDeal, addExpense, addReceipt, addRegion, addTransfer, capitalEntry, saveParty, setRates } from './actions'
 import { emptyData, getState, setState } from './store'
 import { deliveryFee } from '@/domain/pricing'
+import { DISTRIBUTOR_CHARGE } from '@/domain/types'
 
 /** Move a just-saved deal's timestamps to the day it really happened. */
 function backdate(id: string, date: string, steps: string[] = []) {
@@ -38,8 +39,7 @@ export function loadSample() {
   P('distributor', 'Chennai Distributor', '+91 90000 00503', { regionId: che.id })
 
   const deal = (date: string, customerId: string, k: number, quote: number, recipient: string, regionId: string, distributorId: string, done?: string[]) => {
-    const d = addDeal({ dealDate: date, customerId, inrK: k, dubaiQuote: quote, sarPerAed: 1.02145, customerRate: quote + (k * 1000 >= 2_000_000 ? 1.5 : k * 1000 >= 500_000 ? 1.8 : 2), recipientName: recipient, regionId, distributorId, fee: deliveryFee(k * 1000, 300) })
-    if (done) { advanceDeal(d.id); advanceDeal(d.id) }
+    const d = addDeal({ dealDate: date, customerId, inrK: k, dubaiQuote: quote, sarPerAed: 1.02145, customerRate: quote + (k * 1000 >= 2_000_000 ? 1.5 : k * 1000 >= 500_000 ? 1.8 : 2), recipientName: recipient, regionId, distributorId, fee: 0 })
     backdate(d.id, date, done)
     return d
   }
@@ -79,6 +79,16 @@ export function loadSample() {
   X('2026-11-07', ashraf.id, 'AED', 25, 'Bank / exchange charge', 'Exchange house fee')
   X('2026-11-10', op.id, 'INR', 1500, 'Phone', 'Monthly recharge, 3 phones')
   X('2026-11-16', faisal.id, 'SAR', 40, 'Transport', '')
+  // each distributor's charge, entered once a day (₹300 per lakh of that day's deliveries)
+  const days = new Map<string, { date: string; dist: string; inr: number; n: number }>()
+  for (const d of getState().deals) {
+    const k = d.dealDate + d.distributorId
+    const e = days.get(k) ?? { date: d.dealDate, dist: d.distributorId!, inr: 0, n: 0 }
+    e.inr += d.inrPayout
+    e.n++
+    days.set(k, e)
+  }
+  for (const e of days.values()) X(e.date, e.dist, 'INR', deliveryFee(e.inr, 300), DISTRIBUTOR_CHARGE, `${e.n} deal${e.n === 1 ? '' : 's'}`)
   T('settle', '2026-11-18', ashraf.id, rashid.id, 10000, undefined, 'First part')
 }
 

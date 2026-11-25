@@ -5,7 +5,8 @@ import { useData } from '@/data/store'
 import { dealProfitSar } from '@/domain/derive'
 import { dmy, money, rate } from '@/domain/format'
 import { DEAL_STATUS_LABEL, type Deal, type DealStatus } from '@/domain/types'
-import { cn } from '@/lib/utils'
+import { attempt, cn } from '@/lib/utils'
+import { markAllPaid } from '@/data/actions'
 import { Button, Card, Empty, Field, Input, Select, StatusBadge } from '@/components/ui'
 import { useDealDialog } from '@/components/deal/context'
 
@@ -19,6 +20,8 @@ export default function Deals() {
     .filter((d) => (!f.status || d.status === f.status) && (!f.customer || d.customerId === f.customer))
     .filter((d) => !q || [d.dealNo, d.recipientName, d.recipientPhone, name(d.customerId)].some((x) => x.toLowerCase().includes(q)))
     .sort((a, b) => b.dealDate.localeCompare(a.dealDate) || b.dealNo.localeCompare(a.dealNo))
+  // older deals entered before deals were recorded as paid on assignment
+  const waiting = data.deals.filter((d) => d.status === 'assigned' || d.status === 'out_for_delivery' || d.status === 'pending_allocation')
 
   return (
     <div className="grid gap-4">
@@ -38,6 +41,12 @@ export default function Deals() {
         </Field>
         <Button variant="primary" onClick={() => newDeal()}><Plus /> New deal</Button>
       </div>
+      {waiting.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface px-4 py-3 text-sm">
+          <span><b>{waiting.length}</b> older deal{waiting.length === 1 ? ' is' : 's are'} still waiting to be marked paid ({money(waiting.reduce((t, d) => t + d.inrPayout, 0), 'INR')}).</span>
+          <Button size="sm" variant="primary" onClick={() => { if (confirm(`Mark all ${waiting.length} as paid to their recipients?`)) attempt(() => markAllPaid(waiting.map((d) => d.id)), `${waiting.length} deals marked paid`) }}>Mark all paid</Button>
+        </div>
+      )}
       <Card className="p-0 md:p-0">{list.length ? <DealTable deals={list} /> : <Empty>{data.deals.length ? 'No deals match' : 'No deals yet. Add one with New deal.'}</Empty>}</Card>
     </div>
   )
