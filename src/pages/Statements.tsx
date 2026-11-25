@@ -4,16 +4,17 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { partyStatement } from '@/domain/derive'
-import { dmy, drcr, money, todayStr } from '@/domain/format'
+import { dmy, money, todayStr } from '@/domain/format'
 import { downloadCsv, exportLedgersPdf, exportTablePdf } from '@/lib/export'
 import { cn } from '@/lib/utils'
-import { Badge, Button, Card, Empty, Field, Input, Select, Stat } from '@/components/ui'
+import { Button, Card, Empty, Field, Input, Select, Stat } from '@/components/ui'
 
-type Show = 'all' | 'owes' | 'clear' | 'advance'
-const n3 = (n: number) => n.toFixed(3)
-const c3 = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
-const bal = (n: number) => (Math.abs(n) < 0.0005 ? '0.000' : `${Math.abs(n).toFixed(3)} ${n < 0 ? 'Cr' : 'Dr'}`)
-const statusOf = (b: number) => (b > 0.0005 ? 'Owes' : b < -0.0005 ? 'Advance' : 'Clear')
+type Show = 'all' | 'receive' | 'pay' | 'clear'
+const n3 = (n: number) => (Math.abs(n) < 0.0005 ? 0 : n).toFixed(3)
+const c3 = (n: number) => (Math.abs(n) < 0.0005 ? 0 : n).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+/** Which way the balance runs: we receive (കിട്ടാനുള്ളത്) or we pay (കൊടുക്കാനുള്ളത്). */
+const sideOf = (b: number): Exclude<Show, 'all'> => (b > 0.0005 ? 'receive' : b < -0.0005 ? 'pay' : 'clear')
+const SIDE = { receive: 'To receive', pay: 'To pay', clear: 'Clear' } as const
 
 /** Saudi customers' SAR accounts at a glance: pick some and download a summary or their full ledgers. */
 export default function Statements() {
@@ -27,18 +28,17 @@ export default function Statements() {
       .filter((p) => p.type === 'saudi_customer')
       .map((p) => {
         const s = partyStatement(data, p.id, 'SAR', from, to)
-        const opening = s.rows.filter((r) => r.opening).reduce((t, r) => t + r.amount, 0)
-        const billed = s.rows.filter((r) => !r.opening && r.amount > 0).reduce((t, r) => t + r.amount, 0)
-        const received = -s.rows.filter((r) => !r.opening && r.amount < 0).reduce((t, r) => t + r.amount, 0)
+        // every line, opening included, is either + debit or − credit, so debit − credit = balance
+        const debit = s.rows.filter((r) => r.amount > 0).reduce((t, r) => t + r.amount, 0)
+        const credit = -s.rows.filter((r) => r.amount < 0).reduce((t, r) => t + r.amount, 0)
         const deals = data.deals.filter((x) => x.customerId === p.id && x.status !== 'cancelled' && (!from || x.dealDate >= from) && (!to || x.dealDate <= to)).length
-        const lastPaid = data.receipts.filter((r) => r.customerId === p.id && !r.voided && (!to || r.date <= to)).map((r) => r.date).sort().at(-1)
-        return { p, s, opening, billed, received, balance: s.totals.balance, deals, lastPaid }
+        return { p, s, debit, credit, balance: s.totals.balance, deals }
       })
       .sort((a, b) => b.balance - a.balance || a.p.name.localeCompare(b.p.name))
   }, [data, f.from, f.to])
 
   const q = f.q.trim().toLowerCase()
-  const list = rows.filter((r) => (!q || r.p.name.toLowerCase().includes(q) || r.p.phone?.includes(q)) && (f.show === 'all' || statusOf(r.balance).toLowerCase() === f.show))
+  const list = rows.filter((r) => (!q || r.p.name.toLowerCase().includes(q) || r.p.phone?.includes(q)) && (f.show === 'all' || sideOf(r.balance) === f.show))
   const chosen = rows.filter((r) => picked.has(r.p.id))
   const allListed = list.length > 0 && list.every((r) => picked.has(r.p.id))
   const toggle = (id: string) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
@@ -46,13 +46,13 @@ export default function Statements() {
 
   const period = f.from || f.to ? `${dmy(f.from) || 'start'} to ${dmy(f.to) || dmy(todayStr())}` : `as on ${dmy(f.to || todayStr())}`
   const stamp = `${f.from || 'start'}_to_${f.to || todayStr()}`
-  const total = (l: typeof rows) => l.reduce((t, r) => ({ opening: t.opening + r.opening, billed: t.billed + r.billed, received: t.received + r.received, balance: t.balance + r.balance, deals: t.deals + r.deals }), { opening: 0, billed: 0, received: 0, balance: 0, deals: 0 })
-  const HEAD = ['#', 'CUSTOMER', 'PHONE', 'DEALS', 'OPENING (SAR)', 'BILLED (SAR)', 'RECEIVED (SAR)', 'BALANCE (SAR)', 'LAST PAID', 'STATUS']
-  const tableRows = (l: typeof rows) => l.map((r, i) => [String(i + 1), r.p.name, r.p.phone ?? '', String(r.deals), bal(r.opening), n3(r.billed), n3(r.received), bal(r.balance), dmy(r.lastPaid) || '—', statusOf(r.balance)])
-  const footRow = (l: typeof rows) => { const t = total(l); return ['', 'Total', '', String(t.deals), bal(t.opening), n3(t.billed), n3(t.received), bal(t.balance), '', ''] }
+  const total = (l: typeof rows) => l.reduce((t, r) => ({ debit: t.debit + r.debit, credit: t.credit + r.credit, balance: t.balance + r.balance, deals: t.deals + r.deals }), { debit: 0, credit: 0, balance: 0, deals: 0 })
+  const HEAD = ['#', 'CUSTOMER', 'DEALS', '+ DEBIT (SAR)', '- CREDIT (SAR)', 'BALANCE (SAR)', '']
+  const tableRows = (l: typeof rows) => l.map((r, i) => [String(i + 1), r.p.name, String(r.deals), n3(r.debit), n3(r.credit), n3(Math.abs(r.balance)), SIDE[sideOf(r.balance)]])
+  const footRow = (l: typeof rows) => { const t = total(l); return ['', 'Total', String(t.deals), n3(t.debit), n3(t.credit), n3(Math.abs(t.balance)), SIDE[sideOf(t.balance)]] }
 
   const need = () => (chosen.length ? true : (toast.error('Tick at least one customer'), false))
-  const summaryPdf = () => need() && exportTablePdf(`Customer balances  ·  ${period}`, `${chosen.length} customer${chosen.length > 1 ? 's' : ''}  ·  Dr = owes you, Cr = paid in advance`, HEAD, tableRows(chosen), chosen.length > 1 ? footRow(chosen) : undefined, `customer_balances_${stamp}`, [3, 4, 5, 6, 7]).catch((e) => toast.error('PDF failed: ' + (e as Error).message))
+  const summaryPdf = () => need() && exportTablePdf(`Customer balances  ·  ${period}`, `${chosen.length} customer${chosen.length > 1 ? 's' : ''}  ·  balance = debit - credit`, HEAD, tableRows(chosen), chosen.length > 1 ? footRow(chosen) : undefined, `customer_balances_${stamp}`, [2, 3, 4, 5]).catch((e) => toast.error('PDF failed: ' + (e as Error).message))
   const summaryCsv = () => need() && downloadCsv(`customer_balances_${stamp}`, [[`Customer balances · ${period}`], HEAD, ...tableRows(chosen), footRow(chosen)])
   const ledgersPdf = () => need() && exportLedgersPdf(chosen.map((r) => ({ title: `${r.p.name}  ·  SAR Ledger  ·  ${period}`, s: r.s })), chosen.length === 1 ? `${chosen[0].p.name.replace(/[^\w]+/g, '_')}_statement_${stamp}` : `customer_statements_${stamp}`).catch((e) => toast.error('PDF failed: ' + (e as Error).message))
 
@@ -66,8 +66,8 @@ export default function Statements() {
         <Field label="Show" className="flex-1 sm:max-w-44">
           <Select value={f.show} onChange={(e) => setF({ ...f, show: e.target.value as Show })}>
             <option value="all">All customers</option>
-            <option value="owes">Owe you (Dr)</option>
-            <option value="advance">Paid in advance (Cr)</option>
+            <option value="receive">To receive</option>
+            <option value="pay">To pay</option>
             <option value="clear">Clear</option>
           </Select>
         </Field>
@@ -77,10 +77,10 @@ export default function Statements() {
       </div>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <Stat label="Customers" value={String(list.length)} sub={`${list.filter((r) => r.balance > 0.0005).length} owe you`} />
-        <Stat label="Billed" value={money(t.billed, 'SAR')} sub={`${t.deals} deals`} />
-        <Stat label="Received" value={money(t.received, 'SAR')} />
-        <Stat label="Balance" value={<span className={t.balance > 0 ? 'text-pos' : t.balance < 0 ? 'text-neg' : ''}>SAR {drcr(t.balance)}</span>} sub="Dr = owed to you" />
+        <Stat label="Customers" value={String(list.length)} sub={`${t.deals} deals`} />
+        <Stat label="+ Debit" value={money(t.debit, 'SAR')} />
+        <Stat label="− Credit" value={money(t.credit, 'SAR')} />
+        <Stat label={SIDE[sideOf(t.balance)]} value={<span className={t.balance > 0.0005 ? 'text-pos' : t.balance < -0.0005 ? 'text-neg' : ''}>{money(Math.abs(t.balance), 'SAR')}</span>} sub="balance = debit − credit" />
       </div>
 
       <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm">
@@ -98,21 +98,19 @@ export default function Statements() {
                 <thead className="border-b border-border bg-surface-2 text-xs text-muted">
                   <tr>
                     <th className="w-10 px-3 py-2"><input type="checkbox" className="size-4 accent-accent" checked={allListed} onChange={toggleAll} aria-label="Select all" /></th>
-                    {['Customer', 'Deals', 'Opening', 'Billed', 'Received', 'Balance', 'Last paid', 'Status'].map((h, i) => <th key={h} className={cn('px-3 py-2 font-semibold whitespace-nowrap', i === 0 ? 'text-left' : 'text-right')}>{h}</th>)}
+                    {['Customer', 'Deals', '+ Debit', '− Credit', 'Balance', ''].map((h, i) => <th key={h} className={cn('px-3 py-2 font-semibold whitespace-nowrap', i === 0 ? 'text-left' : 'text-right')}>{h}</th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {list.map((r) => (
                     <tr key={r.p.id} onClick={() => toggle(r.p.id)} className={cn('cursor-pointer border-b border-border hover:bg-surface-2', picked.has(r.p.id) && 'bg-accent-soft')}>
                       <td className="px-3 py-2"><input type="checkbox" className="size-4 accent-accent" checked={picked.has(r.p.id)} onChange={() => toggle(r.p.id)} onClick={(e) => e.stopPropagation()} aria-label={'Select ' + r.p.name} /></td>
-                      <td className="px-3 py-2"><Link className="font-semibold text-accent" to={'/parties/' + r.p.id} onClick={(e) => e.stopPropagation()}>{r.p.name}</Link>{r.p.phone && <div className="text-xs text-muted">{r.p.phone}</div>}</td>
+                      <td className="px-3 py-2"><Link className="font-semibold text-accent" to={'/parties/' + r.p.id} onClick={(e) => e.stopPropagation()}>{r.p.name}</Link></td>
                       <td className="px-3 py-2 text-right">{r.deals}</td>
-                      <td className="px-3 py-2 text-right text-muted">{Math.abs(r.opening) > 0.0005 ? drcr(r.opening) : '—'}</td>
-                      <td className="px-3 py-2 text-right">{c3(r.billed)}</td>
-                      <td className="px-3 py-2 text-right">{c3(r.received)}</td>
-                      <td className={cn('px-3 py-2 text-right font-semibold whitespace-nowrap', r.balance > 0.0005 ? 'text-pos' : r.balance < -0.0005 && 'text-neg')}>{drcr(r.balance)}</td>
-                      <td className="px-3 py-2 text-right whitespace-nowrap">{dmy(r.lastPaid) || '—'}</td>
-                      <td className="px-3 py-2 text-right"><Badge>{statusOf(r.balance)}</Badge></td>
+                      <td className="px-3 py-2 text-right whitespace-nowrap"><span className="text-pos">+</span> {c3(r.debit)}</td>
+                      <td className="px-3 py-2 text-right whitespace-nowrap"><span className="text-neg">−</span> {c3(r.credit)}</td>
+                      <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">{c3(Math.abs(r.balance))}</td>
+                      <td className={cn('px-3 py-2 text-right font-semibold whitespace-nowrap', sideOf(r.balance) === 'receive' ? 'text-pos' : sideOf(r.balance) === 'pay' ? 'text-neg' : 'text-muted')}>{SIDE[sideOf(r.balance)]}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -125,9 +123,9 @@ export default function Statements() {
                   <input type="checkbox" className="size-4 shrink-0 accent-accent" checked={picked.has(r.p.id)} onChange={() => toggle(r.p.id)} onClick={(e) => e.stopPropagation()} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-semibold">{r.p.name}</div>
-                    <div className="text-xs text-muted">{r.deals} deals · last paid {dmy(r.lastPaid) || '—'}</div>
+                    <div className="text-xs text-muted">{r.deals} deals · <span className="text-pos">+</span> {c3(r.debit)} · <span className="text-neg">−</span> {c3(r.credit)}</div>
                   </div>
-                  <div className="text-right"><b className={r.balance > 0.0005 ? 'text-pos' : r.balance < -0.0005 ? 'text-neg' : ''}>SAR {drcr(r.balance)}</b><div className="text-xs text-muted">{statusOf(r.balance)}</div></div>
+                  <div className="text-right"><b>{c3(Math.abs(r.balance))}</b><div className={cn('text-xs font-semibold', sideOf(r.balance) === 'receive' ? 'text-pos' : sideOf(r.balance) === 'pay' ? 'text-neg' : 'text-muted')}>{SIDE[sideOf(r.balance)]}</div></div>
                 </li>
               ))}
             </ul>
