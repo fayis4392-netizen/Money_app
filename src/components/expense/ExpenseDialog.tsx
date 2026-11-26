@@ -4,7 +4,7 @@ import { useData } from '@/data/store'
 import { dmy, todayStr } from '@/domain/format'
 import { deliveryFee } from '@/domain/pricing'
 import { DEFAULT_EXPENSE_CATEGORIES, DISTRIBUTOR_CHARGE, OPENING_CURRENCY, PARTY_TYPE_LABEL, type Currency, type Expense } from '@/domain/types'
-import { attempt } from '@/lib/utils'
+import { attempt, cn } from '@/lib/utils'
 import { Button, Dialog, Field, Input, Select } from '@/components/ui'
 
 /** Add or edit an expense. `paidById` preselects who paid (e.g. from their ledger page); `category` presets it (e.g. the daily distributor charge). */
@@ -26,11 +26,14 @@ function ExpenseForm({ edit, paidById, category, onDone }: { edit?: Expense; pai
   const payers = data.parties.filter((p) => p.active && p.type !== 'saudi_customer')
   const curOf = (id: string) => OPENING_CURRENCY[data.parties.find((p) => p.id === id)?.type ?? 'operator']
   const charge = !edit && category === DISTRIBUTOR_CHARGE
-  const first = edit?.paidById ?? paidById ?? (charge ? payers.find((p) => p.type === 'distributor')?.id : payers.find((p) => p.type === 'saudi_collector')?.id) ?? payers[0]?.id ?? ''
+  // a new expense never guesses who paid: "Choose" until someone is picked, so nothing lands on the wrong ledger
+  const first = edit?.paidById ?? ''
+  // the ledger it was opened from (or distributors, for a day's charge) are listed first
+  payers.sort((a, b) => Number(b.id === paidById || (charge && b.type === 'distributor')) - Number(a.id === paidById || (charge && a.type === 'distributor')))
   const [f, setF] = useState({
     date: edit?.date ?? todayStr(),
     paidById: first,
-    currency: (edit?.currency ?? (first ? curOf(first) : 'SAR')) as Currency,
+    currency: (edit?.currency ?? (charge ? 'INR' : first ? curOf(first) : 'SAR')) as Currency,
     amount: edit ? String(edit.amount) : '',
     category: edit?.category ?? category ?? '',
     note: edit?.note ?? '',
@@ -41,8 +44,8 @@ function ExpenseForm({ edit, paidById, category, onDone }: { edit?: Expense; pai
   const pickCategory = (c: string) => {
     const payer = data.parties.find((p) => p.id === f.paidById)
     if (c !== DISTRIBUTOR_CHARGE || edit || payer?.type === 'distributor') return { ...f, category: c }
-    const dist = payers.find((p) => p.type === 'distributor')
-    return dist ? { ...f, category: c, paidById: dist.id, currency: 'INR' as Currency } : { ...f, category: c }
+    // not a distributor: clear the payer so the right distributor is chosen
+    return { ...f, category: c, paidById: '', currency: 'INR' as Currency }
   }
   // categories: the defaults plus any typed before
   const categories = [...new Set([...DEFAULT_EXPENSE_CATEGORIES, ...data.expenses.map((e) => e.category)])]
@@ -58,8 +61,17 @@ function ExpenseForm({ edit, paidById, category, onDone }: { edit?: Expense; pai
     >
       <Field label="Date"><Input type="date" value={f.date} onChange={set('date')} required /></Field>
       <Field label="Paid by">
-        <Select value={f.paidById} onChange={(e) => setF({ ...f, paidById: e.target.value, currency: edit ? f.currency : curOf(e.target.value) })} required>
-          <option value="">Choose</option>
+        <Select
+          value={f.paidById}
+          onChange={(e) => {
+            e.currentTarget.setCustomValidity('')
+            setF({ ...f, paidById: e.target.value, currency: edit ? f.currency : curOf(e.target.value) })
+          }}
+          onInvalid={(e) => e.currentTarget.setCustomValidity('Choose who paid this expense')}
+          className={cn(!f.paidById && 'text-muted')}
+          required
+        >
+          <option value="">Choose who paid…</option>
           {payers.map((p) => <option key={p.id} value={p.id}>{p.name} · {PARTY_TYPE_LABEL[p.type]}</option>)}
         </Select>
       </Field>
