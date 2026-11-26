@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { setRates } from '@/data/actions'
 import { useAppState } from '@/data/store'
+import { useMarketRates } from '@/lib/marketRates'
 import { inrPerSar } from '@/domain/pricing'
 import { rate } from '@/domain/format'
 import { attempt } from '@/lib/utils'
@@ -29,6 +30,8 @@ function RatesForm({ onDone }: { onDone: () => void }) {
   const s = useAppState((x) => x.settings)
   const [form, setForm] = useState({ dubaiQuote: String(s.dubaiQuote), sarPerAed: String(s.sarPerAed), note: '' })
   const q = Number(form.dubaiQuote), c = Number(form.sarPerAed)
+  // today's market rates, shown beside the fields for reference only
+  const m = useMarketRates().rates
   return (
       <form
         id="rates-form"
@@ -38,10 +41,10 @@ function RatesForm({ onDone }: { onDone: () => void }) {
           if (attempt(() => setRates(form), "Today's rates updated")) onDone()
         }}
       >
-        <Field label="Dubai agent's quote (AED per ₹1,000)" hint="New deals start from this. Customer rate = this + premium.">
+        <Field label="Dubai agent's quote (AED per ₹1,000)" hint={<>New deals start from this. Customer rate = this + premium.{m && <> · Market: <b className="text-fg">{(1000 / (m.inrPerSar / m.aedPerSar)).toFixed(2)}</b></>}</>}>
           <Input type="number" step="any" inputMode="decimal" value={form.dubaiQuote} onChange={(e) => setForm({ ...form, dubaiQuote: e.target.value })} required autoFocus />
         </Field>
-        <Field label="SAR per 1 AED" hint="SAR you give to get 1 AED, e.g. 1.0215">
+        <Field label="SAR per 1 AED" hint={<>SAR you give to get 1 AED, e.g. 1.0215{m && <> · Market: <b className="text-fg">{(1 / m.aedPerSar).toFixed(4)}</b></>}</>}>
           <Input type="number" step="any" inputMode="decimal" value={form.sarPerAed} onChange={(e) => setForm({ ...form, sarPerAed: e.target.value })} required />
         </Field>
         <Field label="Note">

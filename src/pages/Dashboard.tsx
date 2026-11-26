@@ -8,6 +8,7 @@ import { deliveryFee, inrPerSar, priceDeal, suggestCustomerRate } from '@/domain
 import { useToInr } from '@/lib/useToInr'
 import { cn } from '@/lib/utils'
 import { BarList, ColumnChart, SplitBar, StepLine } from '@/components/charts'
+import { MarketRatesCard } from '@/components/MarketRates'
 import { Button, Card, CardHeader, Empty, Select, Stat } from '@/components/ui'
 import { useDealDialog } from '@/components/deal/context'
 import { DealTable } from './Deals'
@@ -90,6 +91,8 @@ export default function Dashboard() {
           {Object.entries(SPAN_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </Select>
       </div>
+
+      <MarketRatesCard />
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         <Stat label="₹ delivered" value={inr0(k.now.volume)} sub={<Delta now={k.now.volume} prev={k.prev?.volume} label={prevLabel} />} />
