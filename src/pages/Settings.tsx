@@ -48,7 +48,8 @@ export default function SettingsPage() {
         </Card>
         <SlabsCard key={JSON.stringify(s.slabs)} />
       </div>
-      <DefaultsCard />
+      <DistributorChargeCard />
+      <LedgerWordingCard />
       <DataCard />
       <RatesDialog open={ratesOpen} onClose={() => setRatesOpen(false)} />
     </div>
@@ -107,30 +108,54 @@ function SlabsCard() {
   )
 }
 
-function DefaultsCard() {
+/** The distributor's charge rate: only used to suggest each day's charge entry. */
+function DistributorChargeCard() {
   const s = useAppState((x) => x.settings)
-  const [f, setF] = useState({ distributorFeePerLakh: String(s.distributorFeePerLakh), saleNarration: s.saleNarration, receiptNarration: s.receiptNarration })
+  const [rate, setRate] = useState(String(s.distributorFeePerLakh))
+  const r = Number(rate) || 0
   return (
     <Card>
-      <CardHeader title="Defaults" sub="Starting values for new entries, and the wording used on ledgers and PDF exports." />
+      <CardHeader title="Distributor charge" sub="What distributors usually charge, per ₹1,00,000 they deliver. Used to suggest the amount when you enter a distributor's charge for the day." />
       <form
-        className="grid gap-4 sm:grid-cols-3"
+        className="grid gap-3 sm:grid-cols-[minmax(0,260px)_1fr] sm:items-end"
         onSubmit={(e) => {
           e.preventDefault()
-          attempt(() => saveDefaults(f), 'Defaults saved')
+          attempt(() => saveDefaults({ ...s, distributorFeePerLakh: rate }), 'Distributor charge saved')
         }}
       >
-        <Field label="Distributor charge (₹ per ₹1,00,000)" hint={Number(f.distributorFeePerLakh) >= 0 ? `e.g. ₹25,000 → ₹${deliveryFee(25_000, Number(f.distributorFeePerLakh) || 0)} · ₹1 lakh → ₹${deliveryFee(100_000, Number(f.distributorFeePerLakh) || 0)}. Used to suggest each day's distributor charge (Expenses → Distributor charge). A distributor can have their own rate (Parties → Edit).` : undefined}>
-          <Input type="number" step="any" min={0} inputMode="decimal" value={f.distributorFeePerLakh} onChange={(e) => setF({ ...f, distributorFeePerLakh: e.target.value })} />
-        </Field>
-        <Field label="Particulars for a sale">
+        <Field label="₹ per ₹1,00,000"><Input type="number" step="any" min={0} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} /></Field>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted">₹25,000 → <b className="text-fg">₹{deliveryFee(25_000, r).toLocaleString('en-IN')}</b> · ₹1 lakh → <b className="text-fg">₹{deliveryFee(100_000, r).toLocaleString('en-IN')}</b> · ₹10 lakh → <b className="text-fg">₹{deliveryFee(1_000_000, r).toLocaleString('en-IN')}</b></p>
+          <Button variant="primary" type="submit">Save</Button>
+        </div>
+        <p className="text-xs text-muted sm:col-span-2">A distributor with a different rate: Parties → that distributor → Edit.</p>
+      </form>
+    </Card>
+  )
+}
+
+/** The words printed on ledger lines and PDF statements. */
+function LedgerWordingCard() {
+  const s = useAppState((x) => x.settings)
+  const [f, setF] = useState({ saleNarration: s.saleNarration, receiptNarration: s.receiptNarration })
+  return (
+    <Card>
+      <CardHeader title="Ledger wording" sub="The particulars printed on customer ledgers and PDF statements. Changing them updates existing lines too, except any you reworded one by one." />
+      <form
+        className="grid gap-4 sm:grid-cols-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          attempt(() => saveDefaults({ ...s, ...f }), 'Ledger wording saved')
+        }}
+      >
+        <Field label="For a deal (sale)" hint={<>Ledger line: <b className="text-fg">{f.saleNarration || '…'}</b> · D-0001 · recipient</>}>
           <Input value={f.saleNarration} onChange={(e) => setF({ ...f, saleNarration: e.target.value })} />
         </Field>
-        <Field label="Particulars for cash received">
+        <Field label="For cash received" hint={<>Ledger line: <b className="text-fg">{f.receiptNarration || '…'}</b> · R-0001</>}>
           <Input value={f.receiptNarration} onChange={(e) => setF({ ...f, receiptNarration: e.target.value })} />
         </Field>
-        <div className="sm:col-span-3 flex justify-end">
-          <Button variant="primary" type="submit">Save defaults</Button>
+        <div className="flex justify-end sm:col-span-2">
+          <Button variant="primary" type="submit">Save</Button>
         </div>
       </form>
     </Card>
