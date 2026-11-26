@@ -77,3 +77,84 @@ export function useMarketRates() {
   }, [refresh])
   return { rates, state, refresh }
 }
+
+/* ---------------- daily history (last week / month) ---------------- */
+
+export interface DayRate { date: string; inrPerSar: number; aedPerSar: number }
+const HIST = 'exchange-ledger:fx-history'
+
+const isoDay = (d: Date) => d.toISOString().slice(0, 10)
+
+async function fetchDay(date: string | 'latest'): Promise<DayRate | null> {
+  const urls = [
+    `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${date}/v1/currencies/sar.json`,
+    `https://${date}.currency-api.pages.dev/v1/currencies/sar.json`,
+  ]
+  for (const u of urls) {
+    try {
+      const r = await fetch(u)
+      if (!r.ok) continue
+      const d = (await r.json()) as { date?: string; sar?: Record<string, number> }
+      if (d.sar?.inr && d.sar?.aed) return { date: d.date ?? (date === 'latest' ? isoDay(new Date()) : date), inrPerSar: d.sar.inr, aedPerSar: d.sar.aed }
+    } catch {
+      /* try the mirror */
+    }
+  }
+  return null
+}
+
+/** One rate per day for the last `days` days. Past days never change, so they're kept in this browser. */
+export async function loadHistory(days: number): Promise<DayRate[]> {
+  let store: Record<string, [number, number]> = {}
+  try {
+    store = JSON.parse(localStorage.getItem(HIST) ?? '{}')
+  } catch {
+    /* start fresh */
+  }
+  const today = isoDay(new Date())
+  const dates: string[] = []
+  for (let i = days - 1; i >= 1; i--) dates.push(isoDay(new Date(Date.now() - i * 86_400_000)))
+  const missing = dates.filter((d) => !store[d])
+  const got = await Promise.all(missing.map((d) => fetchDay(d)))
+  got.forEach((x, i) => x && (store[missing[i]] = [x.inrPerSar, x.aedPerSar]))
+  // today's rate may not be published yet: use the newest one there is
+  const latest = await fetchDay('latest')
+  if (latest) store[latest.date] = [latest.inrPerSar, latest.aedPerSar]
+  try {
+    // keep about three months
+    const keep = Object.keys(store).sort().slice(-95)
+    localStorage.setItem(HIST, JSON.stringify(Object.fromEntries(keep.map((k) => [k, store[k]]))))
+  } catch {
+    /* fine */
+  }
+  const from = dates[0] ?? today
+  return Object.keys(store)
+    .filter((d) => d >= from)
+    .sort()
+    .map((d) => ({ date: d, inrPerSar: store[d][0], aedPerSar: store[d][1] }))
+}
+
+export function useRateHistory(days: number) {
+  const [data, setData] = useState<{ days: number; rows: DayRate[] } | null>(null)
+  const [state, setState] = useState<'loading' | 'idle' | 'error'>('loading')
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    let live = true
+    const t = setTimeout(() => {
+      setState('loading')
+      loadHistory(days).then(
+        (rows) => {
+          if (!live) return
+          setData({ days, rows })
+          setState(rows.length ? 'idle' : 'error')
+        },
+        () => live && setState('error'),
+      )
+    }, 0)
+    return () => {
+      live = false
+      clearTimeout(t)
+    }
+  }, [days, tick])
+  return { rows: data?.rows ?? [], state, refresh: () => setTick((n) => n + 1) }
+}

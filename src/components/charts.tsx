@@ -204,3 +204,72 @@ export function SplitBar({ parts }: { parts: { label: string; value: number; col
     </div>
   )
 }
+
+/** One series over days, as a line with a soft area under it, a crosshair and a tooltip. Tight y-scale so small moves show. */
+export function AreaLine({ points, format, height = 200, name, color = 'var(--series-1)' }: { points: { label: string; value: number }[]; format: (n: number) => string; height?: number; name: string; color?: string }) {
+  const [ref, w] = useWidth<HTMLDivElement>()
+  const [hover, setHover] = useState<number | null>(null)
+  const id = 'area-' + name.replace(/\W/g, '')
+  if (points.length < 2) return <div ref={ref} className="grid place-items-center text-sm text-muted" style={{ height }}>Not enough days yet</div>
+  const padL = 52, padR = 10, padT = 12, padB = 22
+  const vals = points.map((p) => p.value)
+  const lo0 = Math.min(...vals), hi0 = Math.max(...vals), span = hi0 - lo0 || Math.abs(hi0) * 0.002 || 1
+  const lo = lo0 - span * 0.25, hi = hi0 + span * 0.25
+  const x = (i: number) => padL + (i / (points.length - 1)) * (w - padL - padR)
+  const y = (v: number) => padT + ((hi - v) / (hi - lo)) * (height - padT - padB)
+  const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i)},${y(p.value)}`).join(' ')
+  const area = `${line} L${x(points.length - 1)},${height - padB} L${x(0)},${height - padB} Z`
+  const ticks = [lo + (hi - lo) * 0.15, (lo + hi) / 2, lo + (hi - lo) * 0.85]
+  const every = Math.max(1, Math.ceil(points.length / Math.max(1, Math.floor((w - padL) / 60))))
+  const at = (clientX: number, el: Element) => {
+    const mx = clientX - el.getBoundingClientRect().left
+    return Math.max(0, Math.min(points.length - 1, Math.round(((mx - padL) / (w - padL - padR)) * (points.length - 1))))
+  }
+  const hv = hover ?? points.length - 1
+  return (
+    <div ref={ref} className="relative" onMouseLeave={() => setHover(null)}>
+      {w > 0 && (
+        <svg width={w} height={height} role="img" aria-label={`${name}: from ${format(points[0].value)} to ${format(points.at(-1)!.value)}`} className="block touch-pan-y"
+          onMouseMove={(e) => setHover(at(e.clientX, e.currentTarget))}
+          onTouchMove={(e) => setHover(at(e.touches[0].clientX, e.currentTarget))}
+          onTouchStart={(e) => setHover(at(e.touches[0].clientX, e.currentTarget))}>
+          <defs>
+            <linearGradient id={id} x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.28} />
+              <stop offset="100%" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          {ticks.map((t) => (
+            <g key={t}>
+              <line x1={padL} x2={w - padR} y1={y(t)} y2={y(t)} stroke="var(--grid)" />
+              <text x={padL - 6} y={y(t)} dy="0.32em" textAnchor="end" className="fill-muted text-[10px] tabular-nums">{format(t)}</text>
+            </g>
+          ))}
+          <path d={area} fill={`url(#${id})`} />
+          <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+          {points.map((p, i) => ((i % every === 0 && points.length - 1 - i >= every * 0.6) || i === points.length - 1 ? <text key={p.label + i} x={x(i)} y={height - 6} textAnchor={i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'} className="fill-muted text-[10px]">{p.label}</text> : null))}
+          <line x1={x(hv)} x2={x(hv)} y1={padT} y2={height - padB} stroke="var(--border)" strokeDasharray={hover == null ? '3 3' : undefined} />
+          <circle cx={x(hv)} cy={y(points[hv].value)} r={5} fill={color} stroke="var(--surface)" strokeWidth={2} />
+        </svg>
+      )}
+      {hover != null && (
+        <Tip x={x(hover)} y={y(points[hover].value)} width={w}>
+          <div className="font-semibold">{points[hover].label}</div>
+          <div className="tabular-nums">{format(points[hover].value)}</div>
+        </Tip>
+      )}
+    </div>
+  )
+}
+
+/** A tiny line for a tile, no axes. */
+export function Sparkline({ values, width = 96, height = 28, color = 'var(--series-1)' }: { values: number[]; width?: number; height?: number; color?: string }) {
+  if (values.length < 2) return null
+  const lo = Math.min(...values), hi = Math.max(...values), span = hi - lo || 1
+  const d = values.map((v, i) => `${i ? 'L' : 'M'}${(i / (values.length - 1)) * (width - 4) + 2},${height - 3 - ((v - lo) / span) * (height - 6)}`).join(' ')
+  return (
+    <svg width={width} height={height} aria-hidden className="block">
+      <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
+}
