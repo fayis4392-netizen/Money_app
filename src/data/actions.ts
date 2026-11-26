@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { round2, round3, round4, round6, slabFor } from '@/domain/pricing'
-import { PARTY_TYPES, PARTY_TYPE_LABEL, type CapitalEntry, type Deal, type Expense, type DealStatus, type Party, type PartyType, type PremiumSlab, type Receipt, type Settings, type Transfer, type TransferKind } from '@/domain/types'
+import { DISTRIBUTOR_CHARGE, PARTY_TYPES, PARTY_TYPE_LABEL, type CapitalEntry, type Deal, type Expense, type DealStatus, type Party, type PartyType, type PremiumSlab, type Receipt, type Settings, type Transfer, type TransferKind } from '@/domain/types'
 import { getState, setState, type AppData } from './store'
 import { balances, canCorrect } from '@/domain/derive'
 import { dmy, drcr, f3, todayStr } from '@/domain/format'
@@ -565,6 +565,7 @@ function expenseFields(input: unknown) {
   const v = check(expenseSchema, input)
   const p = party(v.paidById)
   if (!p || p.type === 'saudi_customer') fail('Choose who paid: a collector, agent, distributor or operator cash')
+  if (v.category === DISTRIBUTOR_CHARGE && p!.type !== 'distributor') sure(`A distributor charge paid by ${p!.name}? That means ${p!.name} paid the distributor's fee in cash. Usually the distributor keeps it, so "Paid by" is the distributor. Save it as paid by ${p!.name}?`)
   if (!HOLDS[p!.type].includes(v.currency)) sure(`${p!.name} doesn't normally hold ${v.currency} (they hold ${HOLDS[p!.type].join(' / ')}). The expense will show on a separate ${v.currency} ledger for them. Save it in ${v.currency} anyway?`)
   checkSize(v.amount, v.currency)
   return { ...v, amount: round3(v.amount) }

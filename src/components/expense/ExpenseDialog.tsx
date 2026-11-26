@@ -37,6 +37,13 @@ function ExpenseForm({ edit, paidById, category, onDone }: { edit?: Expense; pai
     reason: '',
   })
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value } as typeof f)
+  // a distributor's charge is kept by the distributor out of what they hold: switch the payer to one
+  const pickCategory = (c: string) => {
+    const payer = data.parties.find((p) => p.id === f.paidById)
+    if (c !== DISTRIBUTOR_CHARGE || edit || payer?.type === 'distributor') return { ...f, category: c }
+    const dist = payers.find((p) => p.type === 'distributor')
+    return dist ? { ...f, category: c, paidById: dist.id, currency: 'INR' as Currency } : { ...f, category: c }
+  }
   // categories: the defaults plus any typed before
   const categories = [...new Set([...DEFAULT_EXPENSE_CATEGORIES, ...data.expenses.map((e) => e.category)])]
 
@@ -64,7 +71,7 @@ function ExpenseForm({ edit, paidById, category, onDone }: { edit?: Expense; pai
       </Field>
       <div className="col-span-2 -mt-1 flex flex-wrap gap-1.5">
         {categories.map((c) => (
-          <button type="button" key={c} onClick={() => setF({ ...f, category: c })} className={'rounded-full border px-2.5 py-1 text-xs font-semibold ' + (f.category === c ? 'border-accent bg-accent-soft text-accent' : 'border-border text-muted hover:text-fg')}>{c}</button>
+          <button type="button" key={c} onClick={() => setF(pickCategory(c))} className={'rounded-full border px-2.5 py-1 text-xs font-semibold ' + (f.category === c ? 'border-accent bg-accent-soft text-accent' : 'border-border text-muted hover:text-fg')}>{c}</button>
         ))}
       </div>
       {f.category === DISTRIBUTOR_CHARGE && !edit && <ChargeHint date={f.date} distributorId={f.paidById} onUse={(amount, note) => setF({ ...f, amount: String(amount), currency: 'INR', note: f.note || note })} />}
