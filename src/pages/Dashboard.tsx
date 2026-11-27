@@ -70,19 +70,6 @@ export default function Dashboard() {
   const perLakh = (t: { volume: number; profit: number }) => (t.volume ? (t.profit / t.volume) * 100_000 : 0)
   const owed = k.money[0].inr
 
-  if (!data.deals.length)
-    return (
-      <Card>
-        <Empty>
-          <div className="grid justify-items-center gap-3">
-            No deals yet. Charts appear here as soon as the first deals are in.
-            <Button variant="primary" onClick={() => newDeal()}><Plus /> New deal</Button>
-            <span className="text-xs">or load sample data in <Link className="text-accent" to="/settings">Settings</Link></span>
-          </div>
-        </Empty>
-      </Card>
-    )
-
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -95,48 +82,62 @@ export default function Dashboard() {
       <MarketRatesCard />
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <Stat label="₹ delivered" value={inr0(k.now.volume)} sub={<Delta now={k.now.volume} prev={k.prev?.volume} label={prevLabel} />} />
-        <Stat label="Deals" value={k.now.deals} sub={<Delta now={k.now.deals} prev={k.prev?.deals} label={prevLabel} />} />
-        <Stat label="Profit" value={<span className={k.now.profit >= 0 ? 'text-pos' : 'text-neg'}>{inr0(k.now.profit)}</span>} sub={<Delta now={k.now.profit} prev={k.prev?.profit} label={prevLabel} />} />
-        <Stat label="Profit per ₹1 lakh" value={inr0(perLakh(k.now))} sub={k.prev ? <Delta now={perLakh(k.now)} prev={perLakh(k.prev)} label={prevLabel} /> : 'average margin'} />
+        <Stat label="₹ delivered" value={data.deals.length ? inr0(k.now.volume) : '—'} sub={data.deals.length ? <Delta now={k.now.volume} prev={k.prev?.volume} label={prevLabel} /> : 'no deals yet'} />
+        <Stat label="Deals" value={data.deals.length ? k.now.deals : '—'} sub={data.deals.length ? <Delta now={k.now.deals} prev={k.prev?.deals} label={prevLabel} /> : 'no deals yet'} />
+        <Stat label="Profit" value={data.deals.length ? <span className={k.now.profit >= 0 ? 'text-pos' : 'text-neg'}>{inr0(k.now.profit)}</span> : '—'} sub={data.deals.length ? <Delta now={k.now.profit} prev={k.prev?.profit} label={prevLabel} /> : 'no deals yet'} />
+        <Stat label="Profit per ₹1 lakh" value={data.deals.length ? inr0(perLakh(k.now)) : '—'} sub={data.deals.length && k.prev ? <Delta now={perLakh(k.now)} prev={perLakh(k.prev)} label={prevLabel} /> : 'average margin'} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="₹ delivered" sub={span === '30d' ? 'per day' : span === '90d' ? 'per week' : 'per month'}>
-          <ColumnChart name="Rupees delivered" points={k.buckets.map((b) => ({ key: b.key, label: label(b.key), value: b.volume, detail: `${b.deals} deal${b.deals === 1 ? '' : 's'}` }))} format={inr0} />
-        </Panel>
-        <Panel title="Profit" sub={span === '30d' ? 'per day, after delivery charges' : span === '90d' ? 'per week, after delivery charges' : 'per month, after delivery charges'}>
-          <ColumnChart name="Profit" points={k.buckets.map((b) => ({ key: b.key, label: label(b.key), value: Math.round(b.profit), detail: b.volume ? `${inr0((b.profit / b.volume) * 100_000)} per lakh` : undefined }))} format={inr0} />
-        </Panel>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Panel title="Where the money is" sub="Right now, in ₹ at today's rates">
-          <BarList
-            format={inr0}
-            rows={k.money.map((m) => ({ key: m.label, label: m.label, value: Math.round(m.inr), sub: m.inr < -0.5 ? 'you owe them (Cr)' : undefined }))}
-          />
-          <p className="mt-3 text-xs text-muted">{owed > 0 ? <>Customers owe {inr0(owed)}. </> : null}<Link className="text-accent" to="/balances">Debtors &amp; creditors →</Link></p>
-        </Panel>
-        <Panel title="Deals in progress" sub={`Right now · paid: ${SPAN_LABEL[span].toLowerCase()}`}>
-          <SplitBar parts={[
-            { label: 'Assigned to distributor', value: k.status.assigned, color: 'var(--series-1)' },
-            { label: 'Out for delivery', value: k.status.out, color: 'var(--series-2)' },
-            { label: 'Paid to recipient', value: k.status.paid, color: 'var(--series-3)' },
-          ]} />
-          <div className="mt-4 border-t border-border pt-3">
-            <div className="mb-2 text-xs font-semibold text-muted">Still to deliver, by distributor</div>
-            <BarList format={inr0} empty="Nothing waiting" rows={k.pending.slice(0, 5).map((p) => ({ key: p.name, label: p.name, value: p.inr, sub: `${p.deals} deal${p.deals === 1 ? '' : 's'}` }))} />
+      {data.deals.length ? (
+        <>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Panel title="₹ delivered" sub={span === '30d' ? 'per day' : span === '90d' ? 'per week' : 'per month'}>
+              <ColumnChart name="Rupees delivered" points={k.buckets.map((b) => ({ key: b.key, label: label(b.key), value: b.volume, detail: `${b.deals} deal${b.deals === 1 ? '' : 's'}` }))} format={inr0} />
+            </Panel>
+            <Panel title="Profit" sub={span === '30d' ? 'per day, after delivery charges' : span === '90d' ? 'per week, after delivery charges' : 'per month, after delivery charges'}>
+              <ColumnChart name="Profit" points={k.buckets.map((b) => ({ key: b.key, label: label(b.key), value: Math.round(b.profit), detail: b.volume ? `${inr0((b.profit / b.volume) * 100_000)} per lakh` : undefined }))} format={inr0} />
+            </Panel>
           </div>
-        </Panel>
-        <Panel title="Top customers" sub={`By profit, ${SPAN_LABEL[span].toLowerCase()}`}>
-          <BarList
-            format={inr0}
-            empty="No deals in this period"
-            rows={k.customers.slice(0, 6).map((c) => ({ key: c.id, label: <Link className="hover:text-accent" to={'/parties/' + c.id}>{c.name}</Link>, value: Math.round(c.profit), sub: `${c.deals} deal${c.deals === 1 ? '' : 's'} · ${inr0(c.volume)} delivered` }))}
-          />
-        </Panel>
-      </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Panel title="Where the money is" sub="Right now, in ₹ at today's rates">
+              <BarList
+                format={inr0}
+                rows={k.money.map((m) => ({ key: m.label, label: m.label, value: Math.round(m.inr), sub: m.inr < -0.5 ? 'you owe them (Cr)' : undefined }))}
+              />
+              <p className="mt-3 text-xs text-muted">{owed > 0 ? <>Customers owe {inr0(owed)}. </> : null}<Link className="text-accent" to="/balances">Debtors &amp; creditors →</Link></p>
+            </Panel>
+            <Panel title="Deals in progress" sub={`Right now · paid: ${SPAN_LABEL[span].toLowerCase()}`}>
+              <SplitBar parts={[
+                { label: 'Assigned to distributor', value: k.status.assigned, color: 'var(--series-1)' },
+                { label: 'Out for delivery', value: k.status.out, color: 'var(--series-2)' },
+                { label: 'Paid to recipient', value: k.status.paid, color: 'var(--series-3)' },
+              ]} />
+              <div className="mt-4 border-t border-border pt-3">
+                <div className="mb-2 text-xs font-semibold text-muted">Still to deliver, by distributor</div>
+                <BarList format={inr0} empty="Nothing waiting" rows={k.pending.slice(0, 5).map((p) => ({ key: p.name, label: p.name, value: p.inr, sub: `${p.deals} deal${p.deals === 1 ? '' : 's'}` }))} />
+              </div>
+            </Panel>
+            <Panel title="Top customers" sub={`By profit, ${SPAN_LABEL[span].toLowerCase()}`}>
+              <BarList
+                format={inr0}
+                empty="No deals in this period"
+                rows={k.customers.slice(0, 6).map((c) => ({ key: c.id, label: <Link className="hover:text-accent" to={'/parties/' + c.id}>{c.name}</Link>, value: Math.round(c.profit), sub: `${c.deals} deal${c.deals === 1 ? '' : 's'} · ${inr0(c.volume)} delivered` }))}
+              />
+            </Panel>
+          </div>
+        </>
+      ) : (
+        <Card>
+          <Empty>
+            <div className="grid justify-items-center gap-3">
+              No deals yet. Charts appear here as soon as the first deals are in.
+              <Button variant="primary" onClick={() => newDeal()}><Plus /> New deal</Button>
+              <span className="text-xs">or load sample data in <Link className="text-accent" to="/settings">Settings</Link></span>
+            </div>
+          </Empty>
+        </Card>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <Panel title="Dubai quote" sub={`AED per ₹1,000 · now ${rate(s.dubaiQuote)} (₹${rate(Math.round(inrPerSar(s.dubaiQuote, s.sarPerAed) * 100) / 100)} per SAR)`}>
