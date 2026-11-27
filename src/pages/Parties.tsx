@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react'
+import { Plus, Upload } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useData } from '@/data/store'
@@ -7,6 +7,7 @@ import { drcr } from '@/domain/format'
 import { OPENING_CURRENCY, PARTY_TYPES, PARTY_TYPE_LABEL, type Party, type PartyType } from '@/domain/types'
 import { cn } from '@/lib/utils'
 import { Badge, Button, Card, Empty } from '@/components/ui'
+import { ImportPartiesDialog } from '@/components/party/ImportPartiesDialog'
 import { PartyDialog } from '@/components/party/PartyDialog'
 
 const TAB_LABEL: Record<PartyType, string> = {
@@ -23,6 +24,7 @@ export default function Parties() {
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') as PartyType) || 'saudi_customer'
   const [dialog, setDialog] = useState<{ party?: Party } | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
   const bal = useMemo(() => balances(data), [data])
   const list = data.parties.filter((p) => p.type === tab).sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name))
   const cur = OPENING_CURRENCY[tab]
@@ -32,7 +34,10 @@ export default function Parties() {
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">Everyone in the chain, with their running balance. Open one to see the ledger.</p>
-        <Button variant="primary" onClick={() => setDialog({})}><Plus /> Add {PARTY_TYPE_LABEL[tab]}</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setImportOpen(true)}><Upload /> Import PDF / CSV</Button>
+          <Button variant="primary" onClick={() => setDialog({})}><Plus /> Add {PARTY_TYPE_LABEL[tab]}</Button>
+        </div>
       </div>
       <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
         <div className="flex w-max gap-1 rounded-xl bg-surface-2 p-1">
@@ -68,6 +73,7 @@ export default function Parties() {
         )}
       </Card>
       <PartyDialog open={!!dialog} type={tab} party={dialog?.party} onClose={() => setDialog(null)} />
+      <ImportPartiesDialog open={importOpen} type={tab} onClose={() => setImportOpen(false)} />
     </div>
   )
 }
