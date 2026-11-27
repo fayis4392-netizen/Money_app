@@ -69,7 +69,7 @@ export default function Parties() {
             })}
           </ul>
         ) : (
-          <Empty>No {TAB_LABEL[tab].toLowerCase()} yet. Add the first one, or load sample data from Settings.</Empty>
+          <Empty>No {TAB_LABEL[tab].toLowerCase()} yet. Add the first one or import from PDF / CSV.</Empty>
         )}
       </Card>
       <PartyDialog open={!!dialog} type={tab} party={dialog?.party} onClose={() => setDialog(null)} />

@@ -7,7 +7,7 @@ import { fdt, lakh, money, rate, todayStr } from '@/domain/format'
 import { deliveryFee, inrPerSar, round4 } from '@/domain/pricing'
 import { attempt } from '@/lib/utils'
 import { Button, Card, CardHeader, Dialog, Field, Input, Stat } from '@/components/ui'
-import { clearAll, loadSample } from '@/data/sample'
+import { clearAll } from '@/data/sample'
 import { backUpToDrive } from '@/data/backup'
 import { RatesDialog } from '@/components/layout/RatesDialog'
 
@@ -163,7 +163,7 @@ function LedgerWordingCard() {
 }
 
 export function DataCard() {
-  const [ask, setAsk] = useState<'sample' | 'clear' | { file: AppData; name: string } | { point: number; at: string } | null>(null)
+  const [ask, setAsk] = useState<'clear' | { file: AppData; name: string } | { point: number; at: string } | null>(null)
   const [points, setPoints] = useState<{ id: number; version: number; saved_at: string }[] | null>(null)
   const counts = useAppState((x) => x.deals.length + ' deals · ' + x.parties.length + ' parties · ' + x.receipts.length + ' cash entries')
   const online = useSyncStatus() !== 'local'
@@ -203,15 +203,14 @@ export function DataCard() {
   const showPoints = () => listRestorePoints().then(setPoints, (e) => toast.error("Couldn't load restore points: " + (e as Error).message))
 
   const who = online ? 'everyone' : 'this browser'
-  const title = ask === 'sample' ? 'Load sample data' : ask === 'clear' ? 'Clear all data' : ask && 'file' in ask ? 'Restore from backup file' : 'Go back to a restore point'
+  const title = ask === 'clear' ? 'Clear all data' : ask && 'file' in ask ? 'Restore from backup file' : 'Go back to a restore point'
   const message =
-    ask === 'sample' ? `This replaces every party, deal and cash entry with sample books, for ${who}. Rates and slabs stay.`
-    : ask === 'clear' ? `This removes every party, deal and cash entry, for ${who}. Rates and slabs stay.${online ? ' You can go back with a restore point.' : ' It cannot be undone.'}`
+    ask === 'clear' ? `This removes every party, deal and cash entry, for ${who}. Rates and slabs stay.${online ? ' You can go back with a restore point.' : ' It cannot be undone.'}`
     : ask && 'file' in ask ? `Replace the books${online ? ' for everyone' : ''} with ${ask.name} (${ask.file.parties.length} parties · ${ask.file.deals.length} deals · ${ask.file.receipts.length} cash entries)? Download a backup of the current books first if you might need them.`
     : ask ? `Replace the books${online ? ' for everyone' : ''} with how they were on ${ask.at}? Everything entered after that will be gone (download a backup first if unsure).`
     : ''
   const run = async () => {
-    if (ask === 'sample' || ask === 'clear') return attempt(() => (ask === 'sample' ? loadSample() : clearAll()), ask === 'sample' ? 'Sample data loaded' : 'All data cleared')
+    if (ask === 'clear') return attempt(() => clearAll(), 'All data cleared')
     if (ask && 'file' in ask) return attempt(() => setState(() => ask.file), 'Books restored from the file')
     if (ask) {
       try {
@@ -234,7 +233,6 @@ export function DataCard() {
         <Button onClick={() => fileInput.current?.click()}>Restore from backup file</Button>
         <input ref={fileInput} type="file" accept="application/json,.json" className="hidden" onChange={(e) => pickFile(e.target.files?.[0])} />
         {online && <Button onClick={showPoints}>Restore points</Button>}
-        <Button onClick={() => setAsk('sample')}>Load sample data</Button>
         <Button variant="danger" onClick={() => setAsk('clear')}>Clear all data</Button>
       </div>
       <p className="mt-2 text-xs text-muted">
@@ -257,7 +255,7 @@ export function DataCard() {
           )}
         </div>
       )}
-      <Dialog open={!!ask} onClose={() => setAsk(null)} title={title} footer={<><Button onClick={() => setAsk(null)}>Cancel</Button><Button variant={ask === 'sample' ? 'primary' : 'danger'} onClick={async () => { if (await run()) setAsk(null) }}>{ask === 'sample' ? 'Replace with sample' : ask === 'clear' ? 'Clear everything' : 'Restore'}</Button></>}>
+      <Dialog open={!!ask} onClose={() => setAsk(null)} title={title} footer={<><Button onClick={() => setAsk(null)}>Cancel</Button><Button variant="danger" onClick={async () => { if (await run()) setAsk(null) }}>{ask === 'clear' ? 'Clear everything' : 'Restore'}</Button></>}>
         <p className="text-sm text-muted">{message}</p>
       </Dialog>
     </Card>

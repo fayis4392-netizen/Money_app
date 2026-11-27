@@ -133,7 +133,6 @@ export default function Dashboard() {
             <div className="grid justify-items-center gap-3">
               No deals yet. Charts appear here as soon as the first deals are in.
               <Button variant="primary" onClick={() => newDeal()}><Plus /> New deal</Button>
-              <span className="text-xs">or load sample data in <Link className="text-accent" to="/settings">Settings</Link></span>
             </div>
           </Empty>
         </Card>
