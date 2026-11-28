@@ -3,6 +3,7 @@ import { addReceipt, editReceipt } from '@/data/actions'
 import { useData } from '@/data/store'
 import { todayStr } from '@/domain/format'
 import type { Party, Receipt } from '@/domain/types'
+import { getStickyDefaults, saveStickyDefaults } from '@/lib/stickyDefaults'
 import { attempt } from '@/lib/utils'
 import { Button, Dialog, Field, Input, Select } from '@/components/ui'
 
@@ -28,11 +29,14 @@ function ReceiptForm({ customer, collectorId, edit, onDone }: { customer?: Party
   const data = useData()
   const customers = data.parties.filter((x) => x.type === 'saudi_customer' && x.active).sort((a, b) => a.name.localeCompare(b.name))
   const collectors = data.parties.filter((x) => x.type === 'saudi_collector' && x.active)
+  const sticky = !edit ? getStickyDefaults() : {}
+  const validCustomer = (id?: string) => (id && customers.some((c) => c.id === id) ? id : '')
+  const validCollector = (id?: string) => (id && collectors.some((c) => c.id === id) ? id : '')
   const [f, setF] = useState({
-    customerId: edit?.customerId ?? customer?.id ?? '',
-    date: edit?.date ?? todayStr(),
+    customerId: edit?.customerId ?? customer?.id ?? validCustomer(sticky.customerId),
+    date: edit?.date ?? sticky.dealDate ?? todayStr(),
     amount: edit ? String(edit.amount) : '',
-    collectorId: edit?.collectorId ?? collectorId ?? collectors[0]?.id ?? '',
+    collectorId: edit?.collectorId ?? collectorId ?? (validCollector(sticky.collectorId) || collectors[0]?.id || ''),
     narration: edit?.narration ?? '',
     note: edit?.note ?? '',
     reason: '',
@@ -48,7 +52,16 @@ function ReceiptForm({ customer, collectorId, edit, onDone }: { customer?: Party
         const ok = edit
           ? attempt(() => editReceipt(edit.id, f, f.reason), 'Entry updated · change logged')
           : attempt(() => addReceipt(f), 'Cash received recorded')
-        if (ok) onDone()
+        if (ok) {
+          if (!edit) {
+            saveStickyDefaults({
+              customerId: f.customerId,
+              collectorId: f.collectorId,
+              dealDate: f.date,
+            })
+          }
+          onDone()
+        }
       }}
     >
       {!customer && (

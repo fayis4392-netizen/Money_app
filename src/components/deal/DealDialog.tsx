@@ -1,11 +1,12 @@
 import { RotateCcw } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { addDeal, reverseAndReenter } from '@/data/actions'
 import { useData } from '@/data/store'
 import { lakh, money, rate, todayStr } from '@/domain/format'
 import { priceDeal, slabFor, suggestCustomerRate } from '@/domain/pricing'
 import type { Deal } from '@/domain/types'
+import { clearStickyDefaults, getStickyDefaults, saveStickyDefaults } from '@/lib/stickyDefaults'
 import { attempt, cn } from '@/lib/utils'
 import { Button, Dialog, Field, Input, Select } from '@/components/ui'
 import { DealDialogContext } from './context'
@@ -14,6 +15,7 @@ type Open = { mode: 'new'; customerId?: string } | { mode: 'correct'; deal: Deal
 
 export function DealDialogProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState<Open>(null)
+  const [batchKey, setBatchKey] = useState(0)
   const close = () => setOpen(null)
   return (
     <DealDialogContext.Provider value={{ newDeal: (preset) => setOpen({ mode: 'new', customerId: preset?.customerId }), correctDeal: (deal) => setOpen({ mode: 'correct', deal }) }}>
@@ -24,13 +26,39 @@ export function DealDialogProvider({ children }: { children: ReactNode }) {
         wide
         title={open?.mode === 'correct' ? `Correct ${open.deal.dealNo}` : 'New deal'}
         footer={
-          <>
-            <Button onClick={close}>Cancel</Button>
-            <Button variant="primary" type="submit" form="deal-form">{open?.mode === 'correct' ? 'Reverse & save corrected deal' : 'Save deal'}</Button>
-          </>
+          open?.mode === 'correct' ? (
+            <>
+              <Button onClick={close}>Cancel</Button>
+              <Button variant="primary" type="submit" form="deal-form">Reverse &amp; save corrected deal</Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  clearStickyDefaults()
+                  setBatchKey((k) => k + 1)
+                }}
+              >
+                Reset defaults
+              </Button>
+              <span className="flex-1 max-md:hidden" />
+              <Button onClick={close}>Cancel</Button>
+              <Button type="submit" form="deal-form" name="mode" value="another">Save &amp; add another</Button>
+              <Button variant="primary" type="submit" form="deal-form" name="mode" value="close">Save deal</Button>
+            </>
+          )
         }
       >
-        {open && <DealForm key={open.mode === 'correct' ? open.deal.id : 'new'} original={open.mode === 'correct' ? open.deal : undefined} customerId={open.mode === 'new' ? open.customerId : undefined} onDone={close} />}
+        {open && (
+          <DealForm
+            key={open.mode === 'correct' ? open.deal.id : `new-${batchKey}-${open.customerId ?? ''}`}
+            original={open.mode === 'correct' ? open.deal : undefined}
+            customerId={open.mode === 'new' ? open.customerId : undefined}
+            onDone={close}
+            onAnother={() => setBatchKey((k) => k + 1)}
+          />
+        )}
       </Dialog>
     </DealDialogContext.Provider>
   )
@@ -49,26 +77,34 @@ function Section({ n, title, sub, children }: { n: number; title: string; sub?: 
   )
 }
 
-function DealForm({ original, customerId, onDone }: { original?: Deal; customerId?: string; onDone: () => void }) {
+function DealForm({ original, customerId, onDone, onAnother }: { original?: Deal; customerId?: string; onDone: () => void; onAnother: () => void }) {
   const data = useData()
   const nav = useNavigate()
   const st = data.settings
   const customers = data.parties.filter((p) => p.type === 'saudi_customer' && p.active)
+  const sticky = !original ? getStickyDefaults() : {}
+  const validCustomer = (id?: string) => (id && customers.some((c) => c.id === id) ? id : '')
+  const validRegion = (id?: string) => (id && data.regions.some((r) => r.id === id) ? id : '')
+  const validDist = (regId: string, id?: string) =>
+    id && data.parties.some((p) => p.id === id && p.type === 'distributor' && p.active && p.regionId === regId) ? id : ''
+
+  const initRegion = original?.regionId ?? validRegion(sticky.regionId)
   const [f, setF] = useState(() => ({
-    dealDate: original?.dealDate ?? todayStr(),
-    customerId: original?.customerId ?? customerId ?? '',
+    dealDate: original?.dealDate ?? sticky.dealDate ?? todayStr(),
+    customerId: original?.customerId ?? validCustomer(customerId ?? sticky.customerId),
     inrK: original ? String(original.inrPayout / 1000) : '',
     dubaiQuote: String(original?.dubaiQuote ?? st.dubaiQuote),
     sarPerAed: String(original?.sarPerAed ?? st.sarPerAed),
-    customerRate: original ? String(original.customerRate) : '',
+    customerRate: original ? String(original.customerRate) : (sticky.autoRate === false && sticky.customerRate ? sticky.customerRate : ''),
     recipientName: original?.recipientName ?? '',
     recipientPhone: original?.recipientPhone ?? '',
     recipientAddress: original?.recipientAddress ?? '',
-    regionId: original?.regionId ?? '',
-    distributorId: original?.distributorId ?? '',
+    regionId: initRegion,
+    distributorId: original?.distributorId ?? validDist(initRegion, sticky.distributorId),
     fee: original ? String(original.distributorFeeInr) : '',
   }))
-  const [auto, setAuto] = useState(!original)
+  const [auto, setAuto] = useState(!original && sticky.autoRate !== false)
+  const amountRef = useRef<HTMLInputElement>(null)
 
   const inr = Number(f.inrK) * 1000
   const q = Number(f.dubaiQuote)
@@ -94,14 +130,31 @@ function DealForm({ original, customerId, onDone }: { original?: Deal; customerI
       className="grid gap-5 md:grid-cols-[minmax(0,1fr)_300px] md:items-start"
       onSubmit={(e) => {
         e.preventDefault()
+        const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
+        const addAnother = submitter?.value === 'another'
         const input = { ...f, customerRate: custRate, fee }
         let saved: Deal | undefined
         const ok = attempt(() => {
           saved = original ? reverseAndReenter(original.id, input) : addDeal(input)
         }, original ? `${original.dealNo} reversed · corrected deal saved` : 'Deal saved · paid by the distributor')
         if (ok && saved) {
-          onDone()
-          nav('/deals/' + saved.id)
+          if (!original) {
+            saveStickyDefaults({
+              dealDate: f.dealDate,
+              customerId: f.customerId,
+              regionId: f.regionId,
+              distributorId: f.distributorId,
+              autoRate: auto,
+              customerRate: auto ? undefined : String(custRate),
+            })
+          }
+          if (addAnother) {
+            onAnother()
+            setTimeout(() => amountRef.current?.focus(), 0)
+          } else {
+            onDone()
+            nav('/deals/' + saved.id)
+          }
         }
       }}
     >
@@ -116,7 +169,7 @@ function DealForm({ original, customerId, onDone }: { original?: Deal; customerI
             </Select>
           </Field>
           <Field className="col-span-2" label={<>Amount to deliver in India (₹ in thousands) {inr > 0 && <b className="text-fg">= {money(inr, 'INR')}</b>}</>}>
-            <Input type="number" step="any" min={0} inputMode="decimal" value={f.inrK} onChange={set('inrK')} placeholder="e.g. 25 = ₹25,000" required autoFocus />
+            <Input ref={amountRef} type="number" step="any" min={0} inputMode="decimal" value={f.inrK} onChange={set('inrK')} placeholder="e.g. 25 = ₹25,000" required autoFocus />
           </Field>
         </Section>
         <Section n={2} title="Rate" sub="per ₹1,000">
