@@ -1,10 +1,11 @@
 import { Plus, Trash2 } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { saveDefaults, saveSlabs } from '@/data/actions'
 import { getState, listRestorePoints, normalize, restorePoint, setState, useAppState, useSyncStatus, type AppData } from '@/data/store'
 import { fdt, lakh, money, rate, todayStr } from '@/domain/format'
 import { deliveryFee, inrPerSar, round4 } from '@/domain/pricing'
+import { supabase } from '@/lib/supabase'
 import { attempt } from '@/lib/utils'
 import { Button, Card, CardHeader, Dialog, Field, Input, Stat } from '@/components/ui'
 import { clearAll } from '@/data/sample'
@@ -51,6 +52,7 @@ export default function SettingsPage() {
       <DistributorChargeCard />
       <LedgerWordingCard />
       <DataCard />
+      {supabase && <PasswordCard />}
       <RatesDialog open={ratesOpen} onClose={() => setRatesOpen(false)} />
     </div>
   )
@@ -258,6 +260,61 @@ export function DataCard() {
       <Dialog open={!!ask} onClose={() => setAsk(null)} title={title} footer={<><Button onClick={() => setAsk(null)}>Cancel</Button><Button variant="danger" onClick={async () => { if (await run()) setAsk(null) }}>{ask === 'clear' ? 'Clear everything' : 'Restore'}</Button></>}>
         <p className="text-sm text-muted">{message}</p>
       </Dialog>
+    </Card>
+  )
+}
+
+function PasswordCard() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    supabase?.auth.getUser().then(({ data }) => {
+      if (data.user?.email) setEmail(data.user.email)
+    })
+  }, [])
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+    if (password !== confirm) {
+      setError('Passwords do not match')
+      return
+    }
+    setBusy(true)
+    const { error: err } = await supabase!.auth.updateUser({ password })
+    setBusy(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    setPassword('')
+    setConfirm('')
+    toast.success('Password updated')
+  }
+
+  return (
+    <Card>
+      <CardHeader title="Change password" sub={email ? `Signed in as ${email}.` : 'Update the password for your account.'} />
+      <form className="grid gap-3 sm:grid-cols-2" onSubmit={submit}>
+        <Field label="New password">
+          <Input type="password" autoComplete="new-password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} required />
+        </Field>
+        <Field label="Confirm new password">
+          <Input type="password" autoComplete="new-password" minLength={6} value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+        </Field>
+        {error && <p className="text-sm text-neg sm:col-span-2">{error}</p>}
+        <div className="flex justify-end sm:col-span-2">
+          <Button variant="primary" type="submit" disabled={busy}>{busy ? 'Updating…' : 'Update password'}</Button>
+        </div>
+      </form>
     </Card>
   )
 }
