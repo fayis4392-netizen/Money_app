@@ -120,7 +120,12 @@ export default function PartyLedger() {
               <Button variant="primary" onClick={() => setReceipt({})}><Plus /> Cash received</Button>
             </>
           )}
-          {p.type === 'saudi_collector' && <Button variant="primary" onClick={() => setTransfer({ kind: 'send', preset: { fromId: p.id } })}><Send /> Send SAR to Dubai</Button>}
+          {p.type === 'saudi_collector' && (
+            <>
+              <Button onClick={() => setReceipt({})}><Plus /> Cash received from customer</Button>
+              <Button variant="primary" onClick={() => setTransfer({ kind: 'send', preset: { fromId: p.id } })}><Send /> Send SAR to Dubai</Button>
+            </>
+          )}
           {p.type === 'dubai_collector' && (
             <>
               <Button variant="primary" onClick={() => setTransfer({ kind: 'exchange', preset: { fromId: p.id } })}><ArrowLeftRight /> Exchange SAR → AED</Button>
@@ -191,7 +196,7 @@ export default function PartyLedger() {
       <ExpenseDialog open={!!expense} edit={expense?.edit} paidById={p.id} category={expense?.category} onClose={() => setExpense(null)} />
       <ReasonDialog open={!!voidingExp} title={`Void ${voidingExp?.no ?? ''}`} message="The expense stays on the ledger, struck out, with a reversing line." confirm="Void expense" danger onClose={() => setVoidingExp(null)} onConfirm={(r) => attempt(() => voidExpense(voidingExp!.id, r), 'Expense voided')} />
       <PartyDialog open={editParty} type={p.type} party={p} onClose={() => setEditParty(false)} />
-      <ReceiptDialog open={!!receipt} customer={p} edit={receipt?.edit} onClose={() => setReceipt(null)} />
+      <ReceiptDialog open={!!receipt} customer={p.type === 'saudi_customer' ? p : undefined} collectorId={p.type === 'saudi_collector' ? p.id : undefined} edit={receipt?.edit} onClose={() => setReceipt(null)} />
       <VoidDialog target={voiding && { kind: 'receipt', id: voiding.id }} no={voiding?.receiptNo} onClose={() => setVoiding(null)} />
       <Dialog open={!!reword} onClose={() => setReword(null)} title="Edit particulars" footer={<><Button onClick={() => setReword(null)}>Cancel</Button><Button variant="primary" type="submit" form="reword-form">Save</Button></>}>
         {reword && (

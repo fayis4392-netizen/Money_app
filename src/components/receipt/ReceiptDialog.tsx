@@ -6,12 +6,12 @@ import type { Party, Receipt } from '@/domain/types'
 import { attempt } from '@/lib/utils'
 import { Button, Dialog, Field, Input, Select } from '@/components/ui'
 
-export function ReceiptDialog({ open, customer, edit, onClose }: { open: boolean; customer?: Party; edit?: Receipt; onClose: () => void }) {
+export function ReceiptDialog({ open, customer, collectorId, edit, onClose }: { open: boolean; customer?: Party; collectorId?: string; edit?: Receipt; onClose: () => void }) {
   const title = edit
     ? `Edit ${edit.receiptNo}${customer ? ' · ' + customer.name : ''}`
     : customer
       ? `Cash received · ${customer.name}`
-      : 'Cash received'
+      : 'Cash received from customer'
   return (
     <Dialog
       open={open}
@@ -19,12 +19,12 @@ export function ReceiptDialog({ open, customer, edit, onClose }: { open: boolean
       title={title}
       footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" type="submit" form="receipt-form">{edit ? 'Save changes' : 'Save'}</Button></>}
     >
-      {open && <ReceiptForm key={edit?.id ?? customer?.id ?? 'new'} customer={customer} edit={edit} onDone={onClose} />}
+      {open && <ReceiptForm key={edit?.id ?? customer?.id ?? collectorId ?? 'new'} customer={customer} collectorId={collectorId} edit={edit} onDone={onClose} />}
     </Dialog>
   )
 }
 
-function ReceiptForm({ customer, edit, onDone }: { customer?: Party; edit?: Receipt; onDone: () => void }) {
+function ReceiptForm({ customer, collectorId, edit, onDone }: { customer?: Party; collectorId?: string; edit?: Receipt; onDone: () => void }) {
   const data = useData()
   const customers = data.parties.filter((x) => x.type === 'saudi_customer' && x.active).sort((a, b) => a.name.localeCompare(b.name))
   const collectors = data.parties.filter((x) => x.type === 'saudi_collector' && x.active)
@@ -32,7 +32,7 @@ function ReceiptForm({ customer, edit, onDone }: { customer?: Party; edit?: Rece
     customerId: edit?.customerId ?? customer?.id ?? '',
     date: edit?.date ?? todayStr(),
     amount: edit ? String(edit.amount) : '',
-    collectorId: edit?.collectorId ?? collectors[0]?.id ?? '',
+    collectorId: edit?.collectorId ?? collectorId ?? collectors[0]?.id ?? '',
     narration: edit?.narration ?? '',
     note: edit?.note ?? '',
     reason: '',

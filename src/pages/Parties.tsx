@@ -37,7 +37,7 @@ export default function Parties() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">Everyone in the chain, with their running balance. Open one to see the ledger.</p>
         <div className="flex flex-wrap gap-2">
-          {tab === 'saudi_customer' && <Button onClick={() => setReceiptOpen(true)}><Banknote /> Cash received</Button>}
+          {(tab === 'saudi_customer' || tab === 'saudi_collector') && <Button onClick={() => setReceiptOpen(true)}><Banknote /> Cash received</Button>}
           <Button onClick={() => setImportOpen(true)}><Upload /> Import PDF / CSV</Button>
           <Button variant="primary" onClick={() => setDialog({})}><Plus /> Add {PARTY_TYPE_LABEL[tab]}</Button>
         </div>
