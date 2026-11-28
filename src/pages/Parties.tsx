@@ -1,4 +1,4 @@
-import { Plus, Upload } from 'lucide-react'
+import { Banknote, Plus, Upload } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useData } from '@/data/store'
@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { Badge, Button, Card, Empty } from '@/components/ui'
 import { ImportPartiesDialog } from '@/components/party/ImportPartiesDialog'
 import { PartyDialog } from '@/components/party/PartyDialog'
+import { ReceiptDialog } from '@/components/receipt/ReceiptDialog'
 
 const TAB_LABEL: Record<PartyType, string> = {
   saudi_customer: 'Saudi Customers',
@@ -25,6 +26,7 @@ export default function Parties() {
   const tab = (params.get('tab') as PartyType) || 'saudi_customer'
   const [dialog, setDialog] = useState<{ party?: Party } | null>(null)
   const [importOpen, setImportOpen] = useState(false)
+  const [receiptOpen, setReceiptOpen] = useState(false)
   const bal = useMemo(() => balances(data), [data])
   const list = data.parties.filter((p) => p.type === tab).sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name))
   const cur = OPENING_CURRENCY[tab]
@@ -35,6 +37,7 @@ export default function Parties() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">Everyone in the chain, with their running balance. Open one to see the ledger.</p>
         <div className="flex flex-wrap gap-2">
+          {tab === 'saudi_customer' && <Button onClick={() => setReceiptOpen(true)}><Banknote /> Cash received</Button>}
           <Button onClick={() => setImportOpen(true)}><Upload /> Import PDF / CSV</Button>
           <Button variant="primary" onClick={() => setDialog({})}><Plus /> Add {PARTY_TYPE_LABEL[tab]}</Button>
         </div>
@@ -74,6 +77,7 @@ export default function Parties() {
       </Card>
       <PartyDialog open={!!dialog} type={tab} party={dialog?.party} onClose={() => setDialog(null)} />
       <ImportPartiesDialog open={importOpen} type={tab} onClose={() => setImportOpen(false)} />
+      <ReceiptDialog open={receiptOpen} onClose={() => setReceiptOpen(false)} />
     </div>
   )
 }

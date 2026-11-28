@@ -1,4 +1,4 @@
-import { ArrowLeftRight, HandCoins, Handshake, Send } from 'lucide-react'
+import { ArrowLeftRight, Banknote, HandCoins, Handshake, Send } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { VoidDialog } from '@/components/VoidDialog'
@@ -9,6 +9,7 @@ import { achievedRates } from '@/domain/transfers'
 import { TRANSFER_HELP, TRANSFER_LABEL, type Currency, type Transfer, type TransferKind } from '@/domain/types'
 import { cn } from '@/lib/utils'
 import { Badge, Button, Card, CardHeader, Empty, Select } from '@/components/ui'
+import { ReceiptDialog } from '@/components/receipt/ReceiptDialog'
 import { TransferDialog } from '@/components/transfer/TransferDialog'
 
 const ICON: Record<TransferKind, ReactNode> = { send: <Send />, exchange: <ArrowLeftRight />, settle: <Handshake />, payout: <HandCoins /> }
@@ -17,6 +18,7 @@ const KINDS: TransferKind[] = ['send', 'exchange', 'settle', 'payout']
 export default function Transfers() {
   const data = useData()
   const [open, setOpen] = useState<{ kind: TransferKind; edit?: Transfer } | null>(null)
+  const [receiptOpen, setReceiptOpen] = useState(false)
   const [voiding, setVoiding] = useState<Transfer | null>(null)
   const [kind, setKind] = useState<TransferKind | ''>('')
   const bal = useMemo(() => balances(data), [data])
@@ -39,7 +41,11 @@ export default function Transfers() {
     <div className="grid gap-4">
       <p className="text-sm text-muted">Record each step as it happens, in any order and any amount. Ledgers and balances update from these entries.</p>
 
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+        <button onClick={() => setReceiptOpen(true)} className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3 text-left shadow-sm hover:border-accent hover:bg-accent-soft [&_svg]:size-5 [&_svg]:shrink-0 [&_svg]:text-accent">
+          <Banknote />
+          <span><span className="block text-sm font-bold">Cash received</span><span className="block text-xs text-muted max-sm:hidden">Customer → Saudi collector, SAR</span></span>
+        </button>
         {KINDS.map((k) => (
           <button key={k} onClick={() => setOpen({ kind: k })} className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3 text-left shadow-sm hover:border-accent hover:bg-accent-soft [&_svg]:size-5 [&_svg]:shrink-0 [&_svg]:text-accent">
             {ICON[k]}
@@ -106,6 +112,7 @@ export default function Transfers() {
         )}
       </Card>
 
+      <ReceiptDialog open={receiptOpen} onClose={() => setReceiptOpen(false)} />
       <TransferDialog open={!!open} kind={open?.kind ?? 'send'} edit={open?.edit} onClose={() => setOpen(null)} />
       <VoidDialog target={voiding && { kind: 'transfer', id: voiding.id }} no={voiding?.no} onClose={() => setVoiding(null)} />
     </div>

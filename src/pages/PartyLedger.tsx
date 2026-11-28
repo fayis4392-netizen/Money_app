@@ -2,7 +2,7 @@ import { ArrowLeftRight, FileDown, MessageCircle, FileSpreadsheet, HandCoins, Ha
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { addReceipt, cancelDeal, editReceipt, setNarration, voidExpense } from '@/data/actions'
+import { cancelDeal, setNarration, voidExpense } from '@/data/actions'
 import { VoidDialog } from '@/components/VoidDialog'
 import { TransferDialog } from '@/components/transfer/TransferDialog'
 import { CapitalDialog } from '@/pages/Capital'
@@ -10,12 +10,13 @@ import { ExpenseDialog } from '@/components/expense/ExpenseDialog'
 import { useData } from '@/data/store'
 import { canCorrect, deriveLines, partyStatement, type PartyLine } from '@/domain/derive'
 import { dmy, drcr, f3, fdt, todayStr } from '@/domain/format'
-import { DISTRIBUTOR_CHARGE, OPENING_CURRENCY, PARTY_TYPE_LABEL, type Currency, type Deal, type Expense, type Party, type Receipt, type Transfer, type TransferKind } from '@/domain/types'
+import { DISTRIBUTOR_CHARGE, OPENING_CURRENCY, PARTY_TYPE_LABEL, type Currency, type Deal, type Expense, type Receipt, type Transfer, type TransferKind } from '@/domain/types'
 import { exportLedgerCsv, exportLedgerPdf, fileName, ledgerPdfFile, type LedgerStyle } from '@/lib/export'
 import { WhatsAppDialog, type WhatsAppShare } from '@/components/WhatsAppDialog'
 import { attempt, cn } from '@/lib/utils'
-import { Badge, Button, Card, Dialog, Empty, Field, Input, ReasonDialog, Select } from '@/components/ui'
+import { Badge, Button, Card, Dialog, Empty, Field, Input, ReasonDialog } from '@/components/ui'
 import { PartyDialog } from '@/components/party/PartyDialog'
+import { ReceiptDialog } from '@/components/receipt/ReceiptDialog'
 import { useDealDialog } from '@/components/deal/context'
 
 type Row = PartyLine & { balance: number; carriedForward?: boolean }
@@ -307,44 +308,6 @@ function LedgerTable({ rows: allRows, totals, actions, receipts, voided, style, 
         <li className={cn('flex justify-between bg-surface-2/60 px-4 py-3 text-sm font-bold tabular-nums', flow !== 'all' && 'hidden')}><span>Total{totals.qty ? ` · qty ${f3(totals.qty)}` : ''}</span><span>Cr {f3(totals.credit)} · Dr {f3(totals.debit)}</span></li>
       </ul>
     </>
-  )
-}
-
-function ReceiptDialog({ open, customer, edit, onClose }: { open: boolean; customer: Party; edit?: Receipt; onClose: () => void }) {
-  return (
-    <Dialog open={open} onClose={onClose} title={(edit ? `Edit ${edit.receiptNo}` : 'Cash received') + ' · ' + customer.name} footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" type="submit" form="receipt-form">{edit ? 'Save changes' : 'Save'}</Button></>}>
-      {open && <ReceiptForm customer={customer} edit={edit} onDone={onClose} />}
-    </Dialog>
-  )
-}
-
-function ReceiptForm({ customer, edit, onDone }: { customer: Party; edit?: Receipt; onDone: () => void }) {
-  const data = useData()
-  const collectors = data.parties.filter((x) => x.type === 'saudi_collector' && x.active)
-  const [f, setF] = useState({ date: edit?.date ?? todayStr(), amount: edit ? String(edit.amount) : '', collectorId: edit?.collectorId ?? collectors[0]?.id ?? '', narration: edit?.narration ?? '', note: edit?.note ?? '', reason: '' })
-  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
-  return (
-    <form
-      id="receipt-form"
-      className="grid grid-cols-2 gap-3"
-      onSubmit={(e) => {
-        e.preventDefault()
-        const ok = edit ? attempt(() => editReceipt(edit.id, { ...f, customerId: customer.id }, f.reason), 'Entry updated · change logged') : attempt(() => addReceipt({ ...f, customerId: customer.id }), 'Cash received recorded')
-        if (ok) onDone()
-      }}
-    >
-      <Field label="Date"><Input type="date" value={f.date} onChange={set('date')} required /></Field>
-      <Field label="Amount (SAR)"><Input type="number" step="any" min={0} inputMode="decimal" value={f.amount} onChange={set('amount')} required autoFocus /></Field>
-      <Field label="Received by">
-        <Select value={f.collectorId} onChange={set('collectorId')} required>
-          <option value="">{collectors.length ? 'Choose' : 'Add a Saudi collector first'}</option>
-          {collectors.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </Select>
-      </Field>
-      <Field label="Particulars"><Input value={f.narration} onChange={set('narration')} placeholder={data.settings.receiptNarration} /></Field>
-      <Field className="col-span-2" label="Note"><Input value={f.note} onChange={set('note')} placeholder="optional" /></Field>
-      {edit && <Field className="col-span-2" label="Reason for change"><Input value={f.reason} onChange={set('reason')} required placeholder="Kept in the edit history" /></Field>}
-    </form>
   )
 }
 
